@@ -1,2 +1,5 @@
-# -study-windows-kernel
-In-depth study of the Windows operating system.
+# 概述
+系统性学习Windows内核。
+# 已学习列表
+-[] 字符处理
+
