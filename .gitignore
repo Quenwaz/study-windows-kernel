@@ -31,3 +31,6 @@
 *.out
 *.app
 /.vs/study-windows-kernel/v16
+/.vs
+/socket_nonblocking/x64/Debug
+/x64/Debug
