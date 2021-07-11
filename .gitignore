@@ -34,3 +34,9 @@
 /.vs
 /socket_nonblocking/x64/Debug
 /x64/Debug
+*.tlog
+*.pdb
+*.idb
+*.recipe
+*.res
+*.log

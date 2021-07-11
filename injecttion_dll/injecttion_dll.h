@@ -1,0 +1,15 @@
+#pragma once
+
+#if !defined(DIPSLIBAPI)
+#define DIPSLIBAPI __declspec(dllimport)
+#endif
+
+
+///////////////////////////////////////////////////////////////////////////////
+
+
+// External function prototypes
+DIPSLIBAPI BOOL WINAPI SetDIPSHook(DWORD dwThreadId);
+
+
+//////////////////////////////// End of File //////////////////////////////////
