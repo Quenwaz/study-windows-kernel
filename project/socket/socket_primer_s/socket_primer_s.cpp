@@ -18,6 +18,12 @@
 			 printf("recv failed with error %d\n", WSAGetLastError());
 			 break;
 		 }
+
+		 if (Ret == 0) {
+			 printf("Client disconnected.\n");
+			 break;
+		 }
+
 		 printf("recv:%s\n", DataBuffer);
 
 		 if (SOCKET_ERROR == send(NewConnection, DataBuffer, Ret, 0)) {

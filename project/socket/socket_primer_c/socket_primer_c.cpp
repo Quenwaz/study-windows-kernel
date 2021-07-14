@@ -87,7 +87,6 @@ void main(int argc, char **argv)
 	// At this point you can start sending or receiving data on
 	// the socket s. We will just send a hello message to the server.
 
-	printf("We will now try to send a hello message.\n");
 	for (;;)
 	{
 		char buffer[1024] = { 0 };
@@ -97,7 +96,6 @@ void main(int argc, char **argv)
 			printf("send failed with error %d\n", WSAGetLastError());
 			break;
 		}
-		printf("We successfully sent %d byte(s).\n", Ret);
 
 		ZeroMemory(buffer, sizeof(buffer));
 		if (recv(s, buffer, sizeof(buffer), 0) == SOCKET_ERROR) {
