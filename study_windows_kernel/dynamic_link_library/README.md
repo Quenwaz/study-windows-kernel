@@ -79,9 +79,31 @@ __declspec(dllexport) LONG __stdcall MyFunc(int a, int b);
 
 以上函数导出后为`_MyFunc@8`
 
+此时如果使用非Microsoft的编译器去链接`MyFunc`将会失败， 为了用Microsoft的工具包编译一个能与其他编译器厂商的工具包链接的DLL， 有两种方法避免函数名被更改：
+
+1. 创建一个**.def**文件， 结构大致如下:
+
+   ```
+   EXPORTS
+   	MyFunc
+   ```
+
+   当Microsoft链接器解析这个文件时， 会用def文件中定义的名称。 此时如果Microsoft工具构建的可执行执行链接未经改编的DLL时， 尝试查找名`_MyFunc@8`时找不到则会查找MyFun函数名。
+
+2. 可以在代码中添加代码：`#pragma comment(linker, "/export:MyFunc=_MyFunc@8")`
 
 
 
+# 可执行文件查找DLL过程
 
 
+
+由于导入段只包含DLL名称， 不包含DLL的路径， 因此加载程序必须在用户磁盘上查找DLL。其搜索顺序是：
+
+1. 可执行文件目录
+2. Windows系统目录(GetSystemDirectory得到)
+3. Windows目录中的System子目录
+4. Windows目录(GetWindowsDirectory得到)
+5. 进程当前目录
+6. PATH环境变量中所列出的目录
 
