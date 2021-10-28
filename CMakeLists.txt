@@ -12,7 +12,6 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # enable_testing()
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${PROJECT_SOURCE_DIR}/cmake_modules)
-
 option(OPT1 "description" ON)
 
 
@@ -25,15 +24,7 @@ function(GetCurrentFolderName FolderName)
     unset(CURRENT_FOLDER_ABSOLUTE)
 endfunction(GetCurrentFolderName)
 
-
-
-
 add_subdirectory(study_windows_kernel/dynamic_link_library)
-
-
-message(STATUS "msg...")
-
-
 
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})
 set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})
