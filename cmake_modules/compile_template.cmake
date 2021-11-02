@@ -15,7 +15,7 @@ macro(BuildTarget build_to_exe)
 
     message(STATUS "Sources:${SOURCES}")
     if (${build_to_exe})
-        add_executable(${PROJECT_NAME} WIN32 ${SOURCES})
+        add_executable(${PROJECT_NAME} ${ARGN} ${SOURCES})
         message(STATUS "Generate executable program")
     else(${build_to_exe})
         add_library(${PROJECT_NAME} ${SOURCES})

@@ -16,11 +16,12 @@
             }
         },
         {
-            "label": "install",
+            "label": "cmake install",
             "type": "shell",
             "command": "${config:cmake.cmakePath} --install ${command:cmake.buildDirectory} --config ${command:cmake.buildType}",
             "args": [
-            ]
+            ],
+            "dependsOn":["build cmake project"]
         }
     ]
 }
