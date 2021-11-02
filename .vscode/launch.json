@@ -18,7 +18,8 @@
                     "value": "${env:PATH};${command:cmake.getLaunchTargetDirectory}"
                 }
             ],
-            "console": "integratedTerminal"
+            "console": "integratedTerminal",
+            "preLaunchTask": "build cmake project"
         }
     ]
 }

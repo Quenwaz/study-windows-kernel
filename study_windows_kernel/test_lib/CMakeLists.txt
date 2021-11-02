@@ -1,0 +1,6 @@
+
+set(BUILD_SHARED_LIBS TRUE)
+BuildTarget(FALSE)
+message(STATUS "PROJECT_NAME=${PROJECT_NAME}")
+message(STATUS "test_dll_BINARY_DIR=${test_dll_BINARY_DIR}")
+install(TARGETS ${PROJECT_NAME} LIBRARY DESTINATION ${test_dll_BINARY_DIR})

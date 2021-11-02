@@ -14,17 +14,15 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${PROJECT_SOURCE_DIR}/cmake_modules)
 option(OPT1 "description" ON)
 
+message(STATUS "TEST: IMPORTED_CONFIGURATIONS =${IMPORTED_CONFIGURATIONS}")
 
-function(GetCurrentFolderName FolderName)
-    # remove last end of "/"
-    string(REGEX REPLACE "/$" "" CURRENT_FOLDER_ABSOLUTE ${CMAKE_CURRENT_SOURCE_DIR})
-    # get current relative dir name and set target name
-    string(REGEX REPLACE ".*/(.*)" "\\1" FolderName ${CURRENT_FOLDER_ABSOLUTE})
-    set(${FolderName} ${FolderName} PARENT_SCOPE)
-    unset(CURRENT_FOLDER_ABSOLUTE)
-endfunction(GetCurrentFolderName)
+include(utils)
+include(compile_template)
 
-add_subdirectory(study_windows_kernel/dynamic_link_library)
+GetSubDirectory(SubDirList ${CMAKE_CURRENT_LIST_DIR}/study_windows_kernel)
+foreach(child ${SubDirList})
+    add_subdirectory(study_windows_kernel/${child})
+endforeach()
 
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})
 set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})
