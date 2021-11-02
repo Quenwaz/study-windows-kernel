@@ -14,6 +14,13 @@
                 "kind": "build",
                 "isDefault": true
             }
+        },
+        {
+            "label": "install",
+            "type": "shell",
+            "command": "${config:cmake.cmakePath} --install ${command:cmake.buildDirectory} --config ${command:cmake.buildType}",
+            "args": [
+            ]
         }
     ]
 }
