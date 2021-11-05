@@ -4,6 +4,7 @@ BuildTarget(TRUE WIN32)
 #   COMMAND_EXPAND_LISTS
 #   )
 target_link_libraries(${PROJECT_NAME} test_lib)
+target_compile_definitions(${PROJECT_NAME} PRIVATE WIN32 _DEBUG _WINDOWS)
 # set_target_properties()
 
 message(STATUS "PROJECT_BINARY_DIR=${PROJECT_BINARY_DIR}")

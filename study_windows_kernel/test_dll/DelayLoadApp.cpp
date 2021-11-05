@@ -22,7 +22,7 @@ Notices: Copyright (c) 2008 Jeffrey Richter & Christophe Nasarre
 ///////////////////////////////////////////////////////////////////////////////
 
 inline void chMB(PCSTR szMsg) {
-   char szTitle[MAX_PATH];
+   char szTitle[MAX_PATH] = {0};
    GetModuleFileNameA(NULL, szTitle, _countof(szTitle));
    MessageBoxA(GetActiveWindow(), szMsg, szTitle, MB_OK);
 }
@@ -37,7 +37,7 @@ inline void chMB(PCSTR szMsg) {
 
 
 // The name of the Delay-Load module (only used by this sample app)
-TCHAR g_szDelayLoadModuleName[] = TEXT("20-DelayLoadLib");
+TCHAR g_szDelayLoadModuleName[] = TEXT("test_lib");
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -87,7 +87,7 @@ int WINAPI _tWinMain(HINSTANCE hInstExe, HINSTANCE, PTSTR pszCmdLine, int) {
 
       // Unload the delay-loaded DLL
       // NOTE: Name must exactly match /DelayLoad:(DllName)
-		PCSTR pszDll = "20-DelayLoadLib.dll";
+		PCSTR pszDll = "test_lib.dll";
       __FUnloadDelayLoadedDLL2(pszDll);
 
       // Use Debug.Modules to see that the DLL is now unloaded
