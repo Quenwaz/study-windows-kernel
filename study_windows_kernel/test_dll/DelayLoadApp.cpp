@@ -69,7 +69,6 @@ void IsModuleLoaded(PCTSTR pszModuleName) {
 
 
 int WINAPI _tWinMain(HINSTANCE hInstExe, HINSTANCE, PTSTR pszCmdLine, int) {
-
    // Wrap all calls to delay-load DLL functions inside SEH
    __try {
       int x = 0;
