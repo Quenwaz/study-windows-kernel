@@ -96,8 +96,6 @@ __declspec(dllexport) LONG __stdcall MyFunc(int a, int b);
 
 # 可执行文件查找DLL过程
 
-
-
 由于导入段只包含DLL名称， 不包含DLL的路径， 因此加载程序必须在用户磁盘上查找DLL。其搜索顺序是：
 
 1. 可执行文件目录
@@ -106,4 +104,18 @@ __declspec(dllexport) LONG __stdcall MyFunc(int a, int b);
 4. Windows目录(GetWindowsDirectory得到)
 5. 进程当前目录
 6. PATH环境变量中所列出的目录
+
+# 显式载入DLL模块
+进程的线程可以调用如下函数来将一个DLL映射到进程地址空间中：
+```c
+HMODULE LoadLibrary(PCTSTR pszDLLPathName);
+HMODULE LoadLibraryEx(PCTSTR pszDLLPathName, HANDLE hFile, DWORD dwgFlags);
+```
+返回的HMODULE表示文件映像被映射到的虚拟内存地址。HMODULE类型等价于HINSTANCE。如果无法将DLL映射到进程的地址空间， 那么将返回NULL。
+
+hFile为预留字段， 设为NULL即可。 其中dwgFlags可选字段如下:
+- DONT_RESOLVE_DLL_REFERENCES: 告诉系统只需将DLL映射到进程地址空间， 而不调用DllMain进行初始化。同时如果不会载入当前DLL依赖的DLL, 默认情况下会载入。（尽量避免使用， 因为可能调用某个函数时， 其dll没载入）
+- LOAD_LIBRARY_AS_DATAFILE: 该标志告诉系系统将DLL作为数据文件映射到进程的地址空间中。如果未指定该标志， 系统会认为需要执行文件中的代码， 并相应地设置不同段的页面保护属性。 如果指定该标志， 那么调用GEtProcAddress返回NULL, GetLastError返回ERROR_MOD_NOT_FOUND。可以对一个.exe文件进行此映射， 已访问其中的资源。
+- LOAD_LIBRARY_AS_DATAFILE_EXCLUSIVE:
+
 
