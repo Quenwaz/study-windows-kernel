@@ -1,0 +1,11 @@
+set(BUILD_SHARED_LIBS TRUE)
+BuildTarget(FALSE)
+add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_BINARY_DIR}/Debug/${PROJECT_NAME}.dll ${inject_library_BINARY_DIR}/Debug
+  COMMAND_EXPAND_LISTS
+  )
+target_compile_definitions(${PROJECT_NAME} PRIVATE WIN32 _DEBUG _WINDOWS _USRDLL)
+message(STATUS "PROJECT_NAME=${PROJECT_NAME}")
+message(STATUS "inject_library_BINARY_DIR=${inject_library_BINARY_DIR}/${CMAKE_BUILD_TYPE}")
+
+install(TARGETS ${PROJECT_NAME} LIBRARY DESTINATION ${inject_library_BINARY_DIR}/Debug)
