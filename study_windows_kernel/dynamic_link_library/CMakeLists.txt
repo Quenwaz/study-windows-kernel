@@ -1,2 +1,0 @@
-BuildTarget(TRUE)
-message(STATUS "PROJECT_NAME=${PROJECT_NAME}")

@@ -1,6 +1,6 @@
 cmake_minimum_required (VERSION 3.18)
 
-project (study-windows-kernel  LANGUAGES C CXX)
+project (study_windows_kernel  LANGUAGES C CXX)
 
 include (InstallRequiredSystemLibraries)
 
@@ -20,9 +20,16 @@ message(STATUS "TEST: IMPORTED_CONFIGURATIONS =${IMPORTED_CONFIGURATIONS}")
 include(utils)
 include(compile_template)
 
-GetSubDirectory(SubDirList ${CMAKE_CURRENT_LIST_DIR}/study_windows_kernel)
-foreach(child ${SubDirList})
-    add_subdirectory(study_windows_kernel/${child})
+include_directories(src)
+# GetSubDirectory(SubDirList ${CMAKE_CURRENT_LIST_DIR}/src "common_header")
+file(GLOB_RECURSE CMakeListFiles "${CMAKE_CURRENT_LIST_DIR}/src/CMakeLists.txt")
+message(STATUS CMakeListFiles=${CMakeListFiles})
+foreach(CMakeListFile ${CMakeListFiles})
+    get_filename_component(CMakeListDir ${CMakeListFile} DIRECTORY)
+    file(RELATIVE_PATH CMakeListDir ${CMAKE_CURRENT_LIST_DIR}/src ${CMakeListDir})
+    # if(EXISTS ${CMakeListFile}/CMakeLists.txt)
+    add_subdirectory(src/${CMakeListDir})
+    # endif()
 endforeach()
 
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})

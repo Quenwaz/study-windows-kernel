@@ -1,0 +1,5 @@
+set(BUILD_SHARED_LIBS TRUE)
+BuildTarget(FALSE)
+target_link_libraries(${PROJECT_NAME}    dll_hijacking_new)
+target_compile_definitions(${PROJECT_NAME} PRIVATE WIN32 _DEBUG _WINDOWS _USRDLL -DDLL_HIJACKING_EXPORT)
+# install(TARGETS ${PROJECT_NAME} LIBRARY DESTINATION ${test_dll_BINARY_DIR})
