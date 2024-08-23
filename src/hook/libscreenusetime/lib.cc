@@ -82,10 +82,10 @@ LRESULT CALLBACK ShellProc(int nCode, WPARAM wParam, LPARAM lParam)
     return CallNextHookEx(hShellHook, nCode, wParam, lParam);
 }
 
-extern "C" __declspec(dllexport) bool SetShellHook(HINSTANCE hInstance, HWND hWnd)
+extern "C" __declspec(dllexport) bool SetShellHook(HINSTANCE hInstance, HWND hWnd,DWORD threadid)
 {
     hMainWindow = hWnd;
-    hShellHook = SetWindowsHookEx(WH_SHELL, ShellProc, _hmod, 0);
+    hShellHook = SetWindowsHookEx(WH_SHELL, ShellProc, _hmod, threadid);
     if (hShellHook == nullptr){
         fprintf(stderr, "occur error: %d\n", GetLastError());
     }

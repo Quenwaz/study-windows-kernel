@@ -32,7 +32,7 @@ std::map<std::string, long long> usageData; // 记录每个窗口的使用时间
 std::string lastWindowTitle = "";
 auto lastTimePoint = std::chrono::steady_clock::now();
 
-typedef bool (*SetHookFunc)(HINSTANCE, HWND);
+typedef bool (*SetHookFunc)(HINSTANCE, HWND,DWORD);
 typedef void (*RemoveHookFunc)();
 
 std::string GetWindowTitle(HWND hwnd)
@@ -76,7 +76,7 @@ int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmd
     
     if (SetShellHook)
     {
-        if (!SetShellHook(hInst, hwnd)){
+        if (!SetShellHook(hInst, hwnd, 0)){
             MessageBox(hwnd, TEXT("hook failed"), TEXT("error"), MB_OK);
         }
     }
@@ -117,7 +117,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
         lvCol.cx = 250;
         ListView_InsertColumn(hListView, 0, &lvCol);
 
-        lvCol.pszText = TEXT("Usage Time (ms)");
+        lvCol.pszText = TEXT("Usage Time (s)");
         lvCol.cx = 120;
         ListView_InsertColumn(hListView, 1, &lvCol);
 
@@ -149,13 +149,12 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
                 {
                     if (currentWindowTitle != lastWindowTitle)
                     {
-                        if (!lastWindowTitle.empty() && activeWnd != hwnd)
+                        if (!lastWindowTitle.empty())
                         {
                             auto now = std::chrono::steady_clock::now();
                             long long duration = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastTimePoint).count();
                             usageData[lastWindowTitle] += duration;
                             AddDataToListView(hListView, usageData);
-
                         }
                         lastWindowTitle = currentWindowTitle;
                         lastTimePoint = std::chrono::steady_clock::now();
@@ -197,15 +196,15 @@ void AddDataToListView(HWND hListView, std::map<std::string, long long>& data)
         lvItem.pszText = const_cast<LPSTR>(sortedData[i].first.c_str());
         ListView_InsertItem(hListView, &lvItem);
 
-        std::string timeStr = FormatTime(sortedData[i].second);
+        std::string timeStr = FormatTime(sortedData[i].second * 0.001);
         ListView_SetItemText(hListView, i, 1, const_cast<LPSTR>(timeStr.c_str()));
     }
 }
 
 // 格式化时间为字符串
-std::string FormatTime(long long milliseconds)
+std::string FormatTime(long long data)
 {
     std::ostringstream oss;
-    oss << milliseconds;
+    oss << data;
     return oss.str();
 }
