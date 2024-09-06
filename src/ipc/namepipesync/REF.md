@@ -1,0 +1,1 @@
+https://learn.microsoft.com/zh-cn/windows/win32/ipc/named-pipe-server-using-overlapped-i-o

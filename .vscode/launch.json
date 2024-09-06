@@ -8,8 +8,6 @@
             // Resolved by CMake Tools:
             "program": "${command:cmake.launchTargetPath}",
             "args": [
-                "192.168.60.88",
-                "8080"
             ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
@@ -21,7 +19,7 @@
                     "value": "${env:PATH};${command:cmake.getLaunchTargetDirectory};${workspaceFolder}/install/bin"
                 }
             ],
-            "console": "externalTerminal",
+            "console": "internalConsole",
             "preLaunchTask": "build cmake project"
         }
     ]
