@@ -68,7 +68,7 @@ std::string sha256(const std::string& input) {
 void generate_iv(const std::string& keystr,std::vector<unsigned char>&key, std::vector<unsigned char>& iv)
 {
     std::string hashval = sha256(keystr);
-    key.resize(EVP_MAX_KEY_LENGTH);
+    key.resize(EVP_MAX_KEY_LENGTH);  // 最大key长度，单位字节，AES-128: 6byte AES-192: 24byte AES-256: 32byte
     iv.resize(EVP_MAX_IV_LENGTH);
     std::transform(hashval.begin(), hashval.end(), key.begin(), [](char val){
         return val;
@@ -85,6 +85,8 @@ std::string aes_encrypt(const std::string& plaintext, const std::string& keystr)
     std::vector<unsigned char> key;
     std::vector<unsigned char> iv;
     generate_iv(keystr,key,iv);
+    
+    // 使用AES256 CBC加密算法， 还可以切换其他的。 如EVP_aes_256_ecb EVP_aes_128_cbc 等
     EVP_EncryptInit_ex(ctx, EVP_aes_256_cbc(), NULL, key.data(), iv.data());
 
     std::vector<unsigned char> ciphertext(plaintext.size() + AES_BLOCK_SIZE);
