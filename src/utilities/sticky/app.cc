@@ -14,7 +14,7 @@ processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"")
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 void SetTopMost(HWND hwnd, bool topmost);
 
-HWND hButtonTopMost, hButtonCancelTopMost, hEdit, hMainWnd;
+HWND hButtonTopMost, hButtonCancelTopMost, hEdit, g_hMainWnd;
 HWND currentWindow = NULL;
 int action = IDC_BUTTON_TOPMOST;
 HHOOK g_hMouseHook;
@@ -30,7 +30,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     RegisterClass(&wc);
 
-    hMainWnd = CreateWindowEx(
+    g_hMainWnd = CreateWindowEx(
         0,
         CLASS_NAME,
         TEXT("窗口置顶工具"),
@@ -42,7 +42,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         NULL
     );
 
-    if (hMainWnd == NULL) {
+    if (g_hMainWnd == NULL) {
         return 0;
     }
 
@@ -51,7 +51,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         TEXT("置顶窗口"),
         WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
         10, 10, 80, 30,
-        hMainWnd,
+        g_hMainWnd,
         (HMENU)IDC_BUTTON_TOPMOST,
         hInstance,
         NULL
@@ -62,7 +62,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         TEXT("取消置顶"),
         WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
         120, 10, 80, 30,
-        hMainWnd,
+        g_hMainWnd,
         (HMENU)IDC_BUTTON_CANCEL_TOPMOST,
         hInstance,
         NULL
@@ -73,13 +73,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         TEXT(""),
         WS_VISIBLE | WS_CHILD | ES_MULTILINE | ES_AUTOVSCROLL | WS_VSCROLL,
         10, 50, 220, 110,
-        hMainWnd,
+        g_hMainWnd,
         (HMENU)IDC_EDIT,
         hInstance,
         NULL
     );
 
-    ShowWindow(hMainWnd, nCmdShow);
+    ShowWindow(g_hMainWnd, nCmdShow);
 
     MSG msg = {};
     while (GetMessage(&msg, NULL, 0, 0)) {
@@ -103,7 +103,7 @@ LRESULT CALLBACK MouseHookProc(int nCode, WPARAM wParam, LPARAM lParam)
             // ClientToScreen(hwnd, &pt);
             HWND windowUnderCursor = WindowFromPoint(mouseinfo->pt);
             static wchar_t title[256] = {0};
-            if (windowUnderCursor != NULL && windowUnderCursor != hMainWnd && windowUnderCursor != currentWindow) {
+            if (windowUnderCursor != NULL && windowUnderCursor != g_hMainWnd && windowUnderCursor != currentWindow) {
                 currentWindow = windowUnderCursor;
                 ZeroMemory(title, sizeof(title));
                 GetWindowText(currentWindow, title, sizeof(title));
@@ -114,7 +114,7 @@ LRESULT CALLBACK MouseHookProc(int nCode, WPARAM wParam, LPARAM lParam)
             SetWindowText(hEdit, message);
         }else if (wParam == WM_LBUTTONDOWN)
         {
-            if (currentWindow != NULL && currentWindow != hMainWnd) {
+            if (currentWindow != NULL && currentWindow != g_hMainWnd) {
                 SetTopMost(currentWindow, action == IDC_BUTTON_TOPMOST);
                 // Unhook the mouse hook before exiting
                 UnhookWindowsHookEx(g_hMouseHook);
