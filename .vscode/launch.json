@@ -20,7 +20,7 @@
                 }
             ],
             "console": "internalConsole",
-            "preLaunchTask": "build cmake project"
+            // "preLaunchTask": "build cmake project"
         }
     ]
 }

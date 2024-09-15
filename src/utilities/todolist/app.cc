@@ -1,4 +1,5 @@
 #include <windows.h>
+#include <windowsx.h>
 #include <commctrl.h>
 #include <vector>
 #include <string>
@@ -26,17 +27,20 @@ struct TodoItem {
 };
 
 // 全局变量
-HWND hWnd, hList, hEdit, hAddButton, hRemindButton;
+HWND hWnd, hList, hEdit, hAddButton, hRemindButton, hCkBox;
 LONG_PTR OldEditProc;
 HMENU hPopMenu;
 std::vector<TodoItem> todos;
 UINT WM_TRAYICON = RegisterWindowMessage(TEXT("TaskbarCreated"));
-#define ID_TRAYICON 1001
-#define ID_TIMER 1002
+
 #define WM_USER_SHELLICON (WM_USER + 1)
 
 // 定义菜单项ID
-#define ID_TRAY_EXIT 1001
+#define ID_TIMER 1001
+
+#define ID_TRAY_EXIT 1002
+#define ID_TRAYICON 1003
+#define ID_REMIND_CHECKBOX 1004
 
 // 函数声明
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
@@ -154,7 +158,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     OldEditProc = SetWindowLongPtr (hEdit, GWLP_WNDPROC, (LONG_PTR)EditProc);
 
-
     // 创建添加按钮
     hAddButton = CreateWindow(TEXT("BUTTON"), TEXT("+"), 
         WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
@@ -221,11 +224,16 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     DateTime_SetFormat(hwndDP1,TEXT("yyyy/MM/dd HH:mm"));
 
-    CreateWindowEx(
+    hCkBox = CreateWindowEx(
         WS_EX_TRANSPARENT,
         TEXT("BUTTON"), TEXT("每日"), 
-        WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
-        220, 395, 50, 25, hWnd, NULL, hInstance, NULL);
+        WS_CHILD | WS_VISIBLE  | BS_AUTOCHECKBOX | BS_FLAT,
+        220, 395, 50, 25, hWnd, (HMENU)ID_REMIND_CHECKBOX, hInstance, NULL);
+
+    CreateWindow(
+        TEXT("BUTTON"), TEXT("删除"), 
+        WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | BS_FLAT,
+        10, 430, 270, 25, hWnd, NULL, hInstance, NULL);
 
     // 加载保存的 todo 项目
     LoadTodos();
@@ -253,7 +261,6 @@ void show_more()
 {
     RECT rcInput;
     GetRelativeRect(hEdit,&rcInput);
-
 }
 
 
@@ -289,8 +296,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         CreateTrayMenu();
         // 注册热键 (Ctrl + Shift + T)
         RegisterHotKey(hwnd, 1, MOD_CONTROL | MOD_SHIFT, 'T');
-        return 0;
-
+        break;
     case WM_COMMAND:
         if ((HWND)lParam == hAddButton) {
             AddTodoItem();
@@ -298,85 +304,148 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         else if ((HWND)lParam == hRemindButton) {
             SetReminder();
         }
+        else if ((HWND)lParam == hCkBox) {
+            const auto checkstatus = Button_GetCheck(hCkBox) == BST_CHECKED;
+            // Button_SetCheck(hCkBox, checkstatus?BST_UNCHECKED:BST_CHECKED);
+        }
 
         // 处理菜单命令
         if (HIWORD(wParam) == 0 && LOWORD(wParam) == ID_TRAY_EXIT) {
             DestroyWindow(hWnd);    
         }
-        return 0;
-
-
+        break;
     case WM_NOTIFY:
-        if (((LPNMHDR)lParam)->hwndFrom == hList) {
-            switch (((LPNMHDR)lParam)->code) {
-            case NM_CLICK:
+        if (((LPNMHDR)lParam)->hwndFrom == hList) 
+        {
+            switch (((LPNMHDR)lParam)->code) 
             {
-                // 用户点击了 ListView 项
-                LPNMITEMACTIVATE lpnmia = (LPNMITEMACTIVATE)lParam;
-
-                LVHITTESTINFO plvhti = {0};
-                plvhti.pt = lpnmia->ptAction;
-                ListView_SubItemHitTest(hList,&plvhti);
-
-                // 获取点击的行和列
-                int iRow = plvhti.iItem;// lpnmia->iItem;         // 获取行索引
-                int iColumn = plvhti.iSubItem;//  lpnmia->iSubItem;   // 获取列索引
-
-                if (iRow != -1 && iColumn != -1) {
-                    // 处理点击的行和列
-                    wchar_t buffer[256];
-                    wsprintf(buffer, TEXT("点击了第 %d 行，第 %d 列"), iRow + 1, iColumn + 1);
-                    MessageBox(hwnd, buffer, TEXT("ListView Click"), MB_OK);
-                }
-                return 0;
-            }
-            case LVN_ITEMCHANGED:
+                case NM_CLICK:
                 {
+                    // 用户点击了 ListView 项
+                    LPNMITEMACTIVATE lpnmia = (LPNMITEMACTIVATE)lParam;
+
+                    LVHITTESTINFO plvhti = {0};
+                    plvhti.pt = lpnmia->ptAction;
+                    ListView_SubItemHitTest(hList,&plvhti);
+
+                    // 获取点击的行和列
+                    int iRow = plvhti.iItem;// lpnmia->iItem;         // 获取行索引
+                    int iColumn = plvhti.iSubItem;//  lpnmia->iSubItem;   // 获取列索引
+
+                    if (iRow != -1 && iColumn != -1) {
+                        // 处理点击的行和列
+                        wchar_t buffer[256];
+                        wsprintf(buffer, TEXT("点击了第 %d 行，第 %d 列"), iRow + 1, iColumn + 1);
+                        MessageBox(hwnd, buffer, TEXT("ListView Click"), MB_OK);
+                    }
                     
-                    LPNMLISTVIEW pnmv = (LPNMLISTVIEW)lParam;
-                    if (pnmv->uChanged & LVIF_STATE) {
-                        if ((pnmv->uNewState & LVIS_STATEIMAGEMASK) != (pnmv->uOldState & LVIS_STATEIMAGEMASK)) {
-                            // 复选框状态改变
-                            ToggleTodoItem(pnmv->lParam, ((pnmv->uNewState & LVIS_STATEIMAGEMASK) >> 12) == 2);
+                    break;
+
+                }
+                case LVN_ITEMCHANGED:
+                    {
+                        
+                        LPNMLISTVIEW pnmv = (LPNMLISTVIEW)lParam;
+                        if (pnmv->uChanged & LVIF_STATE) {
+                            if ((pnmv->uNewState & LVIS_STATEIMAGEMASK) != (pnmv->uOldState & LVIS_STATEIMAGEMASK)) {
+                                // 复选框状态改变
+                                ToggleTodoItem(pnmv->lParam, ((pnmv->uNewState & LVIS_STATEIMAGEMASK) >> 12) == 2);
+                            }
                         }
                     }
-                }
-                return 0;
-            case LVN_ENDLABELEDIT:
-            {
-                NMLVDISPINFO* pdi = (NMLVDISPINFO*)lParam;
-                if (pdi->item.pszText != NULL) {
-                    EditTodoItem(pdi->item.lParam, pdi->item.pszText);
-                }
-            }
-                return 0;
-            case NM_CUSTOMDRAW:
-            {
-                LPNMLVCUSTOMDRAW pLVCD = (LPNMLVCUSTOMDRAW)lParam;
-
-                // Start custom draw
-                if (pLVCD->nmcd.dwDrawStage == CDDS_PREPAINT) {
-                    return CDRF_NOTIFYITEMDRAW; // Ask to receive item-level notifications
-                }
-
-                // 准备绘制特定的项
-                if (pLVCD->nmcd.dwDrawStage == CDDS_ITEMPREPAINT) {
-                    return CDRF_NOTIFYSUBITEMDRAW; // 请求接收子项级别的通知
-                }
-
-                // Item drawing
-                if (pLVCD->nmcd.dwDrawStage == (CDDS_SUBITEM | CDDS_ITEMPREPAINT)) {
-                    if (pLVCD->iSubItem == 1) { // pLVCD->nmcd.dwItemSpec == 1 For the second item (index 1)
-                        pLVCD->clrText = RGB(255, 0, 0); // Set text color to red
+                    break;
+                case LVN_ENDLABELEDIT:
+                {
+                    NMLVDISPINFO* pdi = (NMLVDISPINFO*)lParam;
+                    if (pdi->item.pszText != NULL) {
+                        EditTodoItem(pdi->item.lParam, pdi->item.pszText);
                     }
-                    return CDRF_NEWFONT;
                 }
-                return 0;
-            }
+                    break;
+                case NM_CUSTOMDRAW:
+                {
+                    LPNMLVCUSTOMDRAW pLVCD = (LPNMLVCUSTOMDRAW)lParam;
+
+                    // Start custom draw
+                    if (pLVCD->nmcd.dwDrawStage == CDDS_PREPAINT) {
+                        return CDRF_NOTIFYITEMDRAW; // Ask to receive item-level notifications
+                    }
+
+                    // 准备绘制特定的项
+                    if (pLVCD->nmcd.dwDrawStage == CDDS_ITEMPREPAINT) {
+                        return CDRF_NOTIFYSUBITEMDRAW; // 请求接收子项级别的通知
+                    }
+
+                    // Item drawing
+                    if (pLVCD->nmcd.dwDrawStage == (CDDS_SUBITEM | CDDS_ITEMPREPAINT)) {
+                        if (pLVCD->iSubItem == 1) { // pLVCD->nmcd.dwItemSpec == 1 For the second item (index 1)
+                            pLVCD->clrText = RGB(255, 0, 0); // Set text color to red
+                        }
+                        return CDRF_NEWFONT;
+                    }
+                    break;
+                }
             }
         }
         break;
+    case WM_DRAWITEM:
+    {
+           LPDRAWITEMSTRUCT pDIS = (LPDRAWITEMSTRUCT)lParam;
+            if (pDIS->CtlID == ID_REMIND_CHECKBOX) { // ID of the checkbox
+                // 获取设备上下文
+                HDC hdc = pDIS->hDC;
 
+                // 设置背景颜色
+                SetBkColor(hdc, RGB(200, 200, 255));
+                FillRect(hdc, &pDIS->rcItem, CreateSolidBrush(RGB(255, 255, 255)));
+
+                // 绘制文本
+                SetTextColor(hdc, RGB(0, 0, 0));
+                const auto ckbox_size = pDIS->rcItem.bottom;
+                RECT rctext = pDIS->rcItem;
+                rctext.left += ckbox_size;
+                DrawText(hdc, TEXT("每日"), -1, &rctext, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+
+                // 绘制 Checkbox 方框
+                RECT box = { pDIS->rcItem.left, pDIS->rcItem.top, pDIS->rcItem.left + ckbox_size, pDIS->rcItem.top + ckbox_size };
+                DrawFrameControl(hdc, &box, DFC_BUTTON, DFCS_BUTTONCHECK |DFCS_CHECKED);// ((pDIS->itemState & ODS_SELECTED) ? DFCS_CHECKED : 0));
+
+                // 设置焦点矩形
+                if (pDIS->itemState & ODS_FOCUS) {
+                    DrawFocusRect(hdc, &pDIS->rcItem);
+                }
+
+                return TRUE;
+            }
+    }
+        break;
+    case WM_CTLCOLORBTN: 
+    {
+        HDC hdc = (HDC)wParam;
+        HWND hControl = (HWND)lParam;
+
+        // 设置文本颜色为白色
+        SetTextColor(hdc, RGB(255, 255, 255));
+        SetBkColor(hdc, RGB(255,0,0));
+        // 设置背景模式为不透明
+        // SetBkMode(hdc, TRANSPARENT);
+        // CreateSolidBrush();  // When you no longer need the HBRUSH object, call the DeleteObject function to delete it.
+        return (LRESULT) CreateSolidBrush(RGB(255,0,0)); //  GetStockObject(NULL_BRUSH); 
+    }
+
+    case WM_CTLCOLORSTATIC:
+        {
+            HDC hdc = (HDC)wParam;
+            HWND hControl = (HWND)lParam;
+
+            // 设置文本颜色为黑色
+            SetTextColor(hdc, RGB(50, 50, 50));
+            // 设置背景为透明
+            SetBkMode(hdc, TRANSPARENT);
+            // 返回空刷，表示不绘制背景
+            return (LRESULT)GetStockObject(NULL_BRUSH);
+        }
+        break;
     case WM_HOTKEY:
         if (wParam == 1) {
             // 置顶/取消置顶
@@ -388,11 +457,11 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 SetForegroundWindow(hwnd);
             }
         }
-        return 0;
+        break;
 
     case WM_CLOSE:
         ShowWindow(hwnd, SW_HIDE);
-        return 0;
+        break;
 
     case WM_DESTROY:
         // 保存 todo 项目
@@ -406,14 +475,14 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             Shell_NotifyIcon(NIM_DELETE, &nid);
         }
         PostQuitMessage(0);
-        return 0;
+        break;
 
     case WM_TIMER:
         if (wParam == ID_TIMER) {
             ShowNotification(TEXT("Todo Reminder"), TEXT("It's time to do your task!"));
             KillTimer(hwnd, ID_TIMER);
         }
-        return 0;
+        break;
 
     case WM_USER_SHELLICON:
         if (lParam == WM_LBUTTONDOWN) {
@@ -427,10 +496,12 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                             pt.x, pt.y, 0, hWnd, NULL);
             PostMessage(hWnd, WM_NULL, 0, 0);
         }
-        return 0;
-    }
+        break;
+    default:
+        return DefWindowProc(hwnd, uMsg, wParam, lParam);
 
-    return DefWindowProc(hwnd, uMsg, wParam, lParam);
+    }
+    return 0;
 }
 
 // 创建托盘菜单
