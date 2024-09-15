@@ -5,6 +5,8 @@
 #include <fstream>
 #include <codecvt>
 #include <locale>
+#include <chrono>
+#include <ctime>
 #include <Strsafe.h>
 #include "common_header/json.hpp"
 
@@ -18,6 +20,8 @@ using json = nlohmann::json;
 // 结构体定义
 struct TodoItem {
     std::wstring text;
+    intptr_t timestamp;
+    intptr_t deadline;
     bool completed;
 };
 
@@ -39,7 +43,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 LRESULT CALLBACK EditProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 void AddTodoItem();
 void EditTodoItem(int index, const std::wstring& newTodo);
-void ToggleTodoItem(int index);
+void ToggleTodoItem(int index,bool checked);
 void SetReminder();
 void ShowNotification(const wchar_t* title, const wchar_t* content);
 void SaveTodos();
@@ -92,7 +96,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     // 初始化 Common Controls
     INITCOMMONCONTROLSEX icex;
     icex.dwSize = sizeof(INITCOMMONCONTROLSEX);
-    icex.dwICC = ICC_LISTVIEW_CLASSES | ICC_STANDARD_CLASSES;
+    icex.dwICC = ICC_LISTVIEW_CLASSES | ICC_STANDARD_CLASSES | ICC_DATE_CLASSES;
     InitCommonControlsEx(&icex);
 
     // 注册窗口类
@@ -112,7 +116,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         CLASS_NAME,
         TEXT("Todo"),
         WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
-        CW_USEDEFAULT, CW_USEDEFAULT, 300, 280,
+        CW_USEDEFAULT, CW_USEDEFAULT, 300, 500,  //280
         NULL,
         NULL,
         hInstance,
@@ -125,19 +129,23 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     // 创建列表视图（带复选框）
     hList = CreateWindowEx(0, WC_LISTVIEW, TEXT(""), 
-        WS_CHILD | WS_VISIBLE | LVS_REPORT | LVS_EDITLABELS | LVS_NOCOLUMNHEADER,
+        WS_CHILD | WS_VISIBLE | LVS_REPORT | LVS_EDITLABELS | LVS_NOCOLUMNHEADER | LVS_SHOWSELALWAYS,
         10, 0, 280, 200, hWnd, NULL, hInstance, NULL);
     
     // 设置列表视图扩展样式以包含复选框
-    ListView_SetExtendedListViewStyle(hList, LVS_EX_CHECKBOXES | LVS_EX_FULLROWSELECT);
+    ListView_SetExtendedListViewStyle(hList, LVS_EX_CHECKBOXES | LVS_EX_BORDERSELECT | LVS_EX_GRIDLINES | LVS_EX_INFOTIP); // | LVS_EX_FULLROWSELECT
     
-
     // 添加列
     LVCOLUMN lvc;
-    lvc.mask = LVCF_TEXT | LVCF_WIDTH;
-    lvc.cx = 250;
+    lvc.mask = LVCF_TEXT | LVCF_WIDTH | LVCF_SUBITEM;
+    lvc.cx = 238;
     lvc.pszText = const_cast<LPTSTR>(TEXT("Todo Items"));
     ListView_InsertColumn(hList, 0, &lvc);
+
+    lvc.mask = LVCF_IMAGE | LVCF_WIDTH| LVCF_SUBITEM;
+    lvc.cx = 25;
+    lvc.pszText = const_cast<LPTSTR>(TEXT("Operation"));
+    ListView_InsertColumn(hList, 1, &lvc);
 
     // 创建输入框
     hEdit = CreateWindowEx(0, TEXT("EDIT"), TEXT(""), 
@@ -157,6 +165,68 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
         250, 210, 25, 25, hWnd, NULL, hInstance, NULL);
 
+    CreateWindowEx(
+        WS_EX_TRANSPARENT,
+        TEXT("STATIC"), TEXT("备注:"), 
+        WS_CHILD | WS_VISIBLE | SS_LEFT | SS_CENTERIMAGE,
+        10, 245, 50, 25, hWnd, NULL, hInstance, NULL);
+
+    // 创建输入框
+    auto hwndEdit = CreateWindowEx(
+                    0, L"EDIT",   // predefined class 
+                    NULL,         // no window title 
+                    WS_CHILD | WS_VISIBLE | WS_VSCROLL | 
+                    ES_LEFT | ES_MULTILINE |WS_BORDER| ES_AUTOVSCROLL, 
+                    10, 270, 260, 75,   // set size in WM_SIZE message 
+                    hWnd,         // parent window 
+                    0,   // edit control ID 
+                    hInstance, 
+                    NULL);        // pointer not needed 
+
+
+    CreateWindowEx(
+        WS_EX_TRANSPARENT,
+        TEXT("STATIC"), TEXT("截止:"), 
+        WS_CHILD | WS_VISIBLE | SS_LEFT | SS_CENTERIMAGE,
+        10, 360, 40, 25, hWnd, NULL, hInstance, NULL);
+
+    auto hwndDP = CreateWindowEx(0,
+                            DATETIMEPICK_CLASS,
+                            TEXT("DateTime"),
+                            WS_BORDER|WS_CHILD|WS_VISIBLE,
+                            50,360,165,25,
+                            hWnd,
+                            NULL,
+                            hInstance,
+                            NULL);
+
+    DateTime_SetFormat(hwndDP,TEXT("yyyy/MM/dd HH:mm"));
+
+
+    CreateWindowEx(
+        WS_EX_TRANSPARENT,
+        TEXT("STATIC"), TEXT("提醒:"), 
+        WS_CHILD | WS_VISIBLE | SS_LEFT | SS_CENTERIMAGE,
+        10, 395, 40, 25, hWnd, NULL, hInstance, NULL);
+
+    auto hwndDP1 = CreateWindowEx(0,
+                            DATETIMEPICK_CLASS,
+                            TEXT("DateTime"),
+                            WS_BORDER|WS_CHILD|WS_VISIBLE,
+                            50,395,165,25,
+                            hWnd,
+                            NULL,
+                            hInstance,
+                            NULL);
+
+    DateTime_SetFormat(hwndDP1,TEXT("yyyy/MM/dd HH:mm"));
+
+    CreateWindowEx(
+        WS_EX_TRANSPARENT,
+        TEXT("BUTTON"), TEXT("每日"), 
+        WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
+        220, 395, 50, 25, hWnd, NULL, hInstance, NULL);
+
     // 加载保存的 todo 项目
     LoadTodos();
 
@@ -170,6 +240,20 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     }
 
     return 0;
+}
+
+void GetRelativeRect(HWND hwnd, LPRECT rc)
+{
+    GetWindowRect(hwnd,rc);
+    MapWindowPoints(HWND_DESKTOP,hWnd,(LPPOINT)rc,2);
+}
+
+
+void show_more()
+{
+    RECT rcInput;
+    GetRelativeRect(hEdit,&rcInput);
+
 }
 
 
@@ -225,24 +309,70 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     case WM_NOTIFY:
         if (((LPNMHDR)lParam)->hwndFrom == hList) {
             switch (((LPNMHDR)lParam)->code) {
+            case NM_CLICK:
+            {
+                // 用户点击了 ListView 项
+                LPNMITEMACTIVATE lpnmia = (LPNMITEMACTIVATE)lParam;
+
+                LVHITTESTINFO plvhti = {0};
+                plvhti.pt = lpnmia->ptAction;
+                ListView_SubItemHitTest(hList,&plvhti);
+
+                // 获取点击的行和列
+                int iRow = plvhti.iItem;// lpnmia->iItem;         // 获取行索引
+                int iColumn = plvhti.iSubItem;//  lpnmia->iSubItem;   // 获取列索引
+
+                if (iRow != -1 && iColumn != -1) {
+                    // 处理点击的行和列
+                    wchar_t buffer[256];
+                    wsprintf(buffer, TEXT("点击了第 %d 行，第 %d 列"), iRow + 1, iColumn + 1);
+                    MessageBox(hwnd, buffer, TEXT("ListView Click"), MB_OK);
+                }
+                return 0;
+            }
             case LVN_ITEMCHANGED:
                 {
+                    
                     LPNMLISTVIEW pnmv = (LPNMLISTVIEW)lParam;
                     if (pnmv->uChanged & LVIF_STATE) {
                         if ((pnmv->uNewState & LVIS_STATEIMAGEMASK) != (pnmv->uOldState & LVIS_STATEIMAGEMASK)) {
                             // 复选框状态改变
-                            ToggleTodoItem(pnmv->iItem);
+                            ToggleTodoItem(pnmv->lParam, ((pnmv->uNewState & LVIS_STATEIMAGEMASK) >> 12) == 2);
                         }
                     }
                 }
+                return 0;
             case LVN_ENDLABELEDIT:
             {
                 NMLVDISPINFO* pdi = (NMLVDISPINFO*)lParam;
                 if (pdi->item.pszText != NULL) {
-                    EditTodoItem(pdi->item.iItem, pdi->item.pszText);
+                    EditTodoItem(pdi->item.lParam, pdi->item.pszText);
                 }
             }
                 return 0;
+            case NM_CUSTOMDRAW:
+            {
+                LPNMLVCUSTOMDRAW pLVCD = (LPNMLVCUSTOMDRAW)lParam;
+
+                // Start custom draw
+                if (pLVCD->nmcd.dwDrawStage == CDDS_PREPAINT) {
+                    return CDRF_NOTIFYITEMDRAW; // Ask to receive item-level notifications
+                }
+
+                // 准备绘制特定的项
+                if (pLVCD->nmcd.dwDrawStage == CDDS_ITEMPREPAINT) {
+                    return CDRF_NOTIFYSUBITEMDRAW; // 请求接收子项级别的通知
+                }
+
+                // Item drawing
+                if (pLVCD->nmcd.dwDrawStage == (CDDS_SUBITEM | CDDS_ITEMPREPAINT)) {
+                    if (pLVCD->iSubItem == 1) { // pLVCD->nmcd.dwItemSpec == 1 For the second item (index 1)
+                        pLVCD->clrText = RGB(255, 0, 0); // Set text color to red
+                    }
+                    return CDRF_NEWFONT;
+                }
+                return 0;
+            }
             }
         }
         break;
@@ -330,22 +460,28 @@ void AddTodoItem() {
         TodoItem item;
         item.text = buffer;
         item.completed = false;
+        item.timestamp = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
         todos.push_back(item);
 
         LVITEM lvi = {0};
-        lvi.mask = LVIF_TEXT;
+        lvi.mask = LVIF_TEXT | LVIF_PARAM;
         lvi.pszText = buffer;
+        lvi.lParam = todos.size()-1;
         int index = ListView_InsertItem(hList, &lvi);
         ListView_SetCheckState(hList, index, FALSE);
+
+
+        ListView_SetItemText(hList, index, 1, TEXT("!!!"));
+
         SetWindowText(hEdit, TEXT(""));
 
         SaveTodos();
     }
 }
 
-void ToggleTodoItem(int index) {
+void ToggleTodoItem(int index, bool checked) {
     if (index >= 0 && index < todos.size()) {
-        BOOL checked = ListView_GetCheckState(hList, index);
+        // BOOL checked = ListView_GetCheckState(hList, index);
         todos[index].completed = checked;
         SaveTodos();
     }
@@ -372,7 +508,7 @@ void ShowNotification(const wchar_t* title, const wchar_t* content) {
 void SaveTodos() {
     json j;
     for (const auto& item : todos) {
-        j.push_back({{"text",wstrToUTF8(item.text)}, {"status", item.completed}});
+        j.push_back({{"text",wstrToUTF8(item.text)}, {"status", item.completed}, {"createTime", item.timestamp}});
     }
     std::ofstream o("todos.json");
     o << j << std::endl;
@@ -389,12 +525,15 @@ void LoadTodos() {
             TodoItem todo;
             todo.text = utf8Towstr(item["text"]);
             todo.completed = item["status"];
+            todo.timestamp = item["createTime"];
             todos.push_back(todo);
 
             LVITEM lvi = {0};
-            lvi.mask = LVIF_TEXT;
+            lvi.mask = LVIF_TEXT | LVIF_PARAM;
             lvi.pszText = const_cast<LPTSTR>(todo.text.c_str());
+            lvi.lParam = todos.size() - 1;
             int index = ListView_InsertItem(hList, &lvi);
+            ListView_SetItemText(hList, index, 1, TEXT("!!!"));
             ListView_SetCheckState(hList, index, todo.completed);
         }
     }
