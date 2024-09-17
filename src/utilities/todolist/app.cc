@@ -27,8 +27,9 @@ struct TodoItem {
 };
 
 // 全局变量
-HWND hWnd, hList, hEdit, hAddButton, hRemindButton, hCkBox;
-LONG_PTR OldEditProc;
+HWND g_hMainWnd, g_hListView;
+bool g_expand = false;
+LONG_PTR OldEditProc, oldBtnProc;
 HMENU hPopMenu;
 std::vector<TodoItem> todos;
 UINT WM_TRAYICON = RegisterWindowMessage(TEXT("TaskbarCreated"));
@@ -38,9 +39,14 @@ UINT WM_TRAYICON = RegisterWindowMessage(TEXT("TaskbarCreated"));
 // 定义菜单项ID
 #define ID_TIMER 1001
 
-#define ID_TRAY_EXIT 1002
-#define ID_TRAYICON 1003
-#define ID_REMIND_CHECKBOX 1004
+#define IDM_TRAY_EXIT 1002
+#define IDI_TRAYICON 1003
+#define IDC_EDIT_TITLE 1004
+#define IDC_BOTTON_ADD 1005
+#define IDC_BOTTON_EXPAND 1006
+#define IDC_EDIT_REMARK 1007
+#define IDC_REMIND_CHECKBOX 1008
+#define IDC_BOTTON_DEL 1009
 
 // 函数声明
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
@@ -115,90 +121,87 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     RegisterClass(&wc);
 
     // 创建窗口
-    hWnd = CreateWindowEx(
+    g_hMainWnd = CreateWindowEx(
         0,
         CLASS_NAME,
         TEXT("Todo"),
         WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
-        CW_USEDEFAULT, CW_USEDEFAULT, 300, 500,  //280
+        CW_USEDEFAULT, CW_USEDEFAULT, 300, 280,  //500
         NULL,
         NULL,
         hInstance,
         NULL
     );
 
-    if (hWnd == NULL) {
+    if (g_hMainWnd == NULL) {
         return 0;
     }
 
     // 创建列表视图（带复选框）
-    hList = CreateWindowEx(0, WC_LISTVIEW, TEXT(""), 
+    g_hListView = CreateWindowEx(0, WC_LISTVIEW, TEXT(""), 
         WS_CHILD | WS_VISIBLE | LVS_REPORT | LVS_EDITLABELS | LVS_NOCOLUMNHEADER | LVS_SHOWSELALWAYS,
-        10, 0, 280, 200, hWnd, NULL, hInstance, NULL);
+        10, 0, 280, 200, g_hMainWnd, NULL, hInstance, NULL);
     
     // 设置列表视图扩展样式以包含复选框
-    ListView_SetExtendedListViewStyle(hList, LVS_EX_CHECKBOXES | LVS_EX_BORDERSELECT | LVS_EX_GRIDLINES | LVS_EX_INFOTIP); // | LVS_EX_FULLROWSELECT
+    ListView_SetExtendedListViewStyle(g_hListView, LVS_EX_CHECKBOXES | LVS_EX_BORDERSELECT | LVS_EX_GRIDLINES | LVS_EX_INFOTIP); // | LVS_EX_FULLROWSELECT
     
     // 添加列
     LVCOLUMN lvc;
     lvc.mask = LVCF_TEXT | LVCF_WIDTH | LVCF_SUBITEM;
     lvc.cx = 238;
     lvc.pszText = const_cast<LPTSTR>(TEXT("Todo Items"));
-    ListView_InsertColumn(hList, 0, &lvc);
+    ListView_InsertColumn(g_hListView, 0, &lvc);
 
     lvc.mask = LVCF_IMAGE | LVCF_WIDTH| LVCF_SUBITEM;
     lvc.cx = 25;
     lvc.pszText = const_cast<LPTSTR>(TEXT("Operation"));
-    ListView_InsertColumn(hList, 1, &lvc);
+    ListView_InsertColumn(g_hListView, 1, &lvc);
 
     // 创建输入框
-    hEdit = CreateWindowEx(0, TEXT("EDIT"), TEXT(""), 
+    const auto hEdit = CreateWindowEx(0, TEXT("EDIT"), TEXT(""), 
         WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL,
-        10, 210, 200, 25, hWnd, 0, hInstance, NULL);
+        10, 210, 200, 25, g_hMainWnd, (HMENU)IDC_EDIT_TITLE, hInstance, NULL);
 
     OldEditProc = SetWindowLongPtr (hEdit, GWLP_WNDPROC, (LONG_PTR)EditProc);
-
     // 创建添加按钮
-    hAddButton = CreateWindow(TEXT("BUTTON"), TEXT("+"), 
+    CreateWindow(TEXT("BUTTON"), TEXT("+"), 
         WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-        220, 210, 25, 25, hWnd, NULL, hInstance, NULL);
+        220, 210, 25, 25, g_hMainWnd, (HMENU)IDC_BOTTON_ADD, hInstance, NULL);
 
     // 创建提醒按钮
-    hRemindButton = CreateWindow(TEXT("BUTTON"), TEXT("!!!"), 
+    CreateWindow(TEXT("BUTTON"), TEXT("v"), 
         WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-        250, 210, 25, 25, hWnd, NULL, hInstance, NULL);
+        250, 210, 25, 25, g_hMainWnd, (HMENU)IDC_BOTTON_EXPAND, hInstance, NULL);
 
     CreateWindowEx(
         WS_EX_TRANSPARENT,
         TEXT("STATIC"), TEXT("备注:"), 
         WS_CHILD | WS_VISIBLE | SS_LEFT | SS_CENTERIMAGE,
-        10, 245, 50, 25, hWnd, NULL, hInstance, NULL);
+        10, 245, 50, 25, g_hMainWnd,  (HMENU)IDC_EDIT_REMARK, hInstance, NULL);
 
-    // 创建输入框
-    auto hwndEdit = CreateWindowEx(
-                    0, L"EDIT",   // predefined class 
-                    NULL,         // no window title 
-                    WS_CHILD | WS_VISIBLE | WS_VSCROLL | 
-                    ES_LEFT | ES_MULTILINE |WS_BORDER| ES_AUTOVSCROLL, 
-                    10, 270, 260, 75,   // set size in WM_SIZE message 
-                    hWnd,         // parent window 
-                    0,   // edit control ID 
-                    hInstance, 
-                    NULL);        // pointer not needed 
-
+    CreateWindowEx(
+                0, L"EDIT",   // predefined class 
+                NULL,         // no window title 
+                WS_CHILD | WS_VISIBLE | WS_VSCROLL | 
+                ES_LEFT | ES_MULTILINE |WS_BORDER| ES_AUTOVSCROLL, 
+                10, 270, 260, 75,   // set size in WM_SIZE message 
+                g_hMainWnd,         // parent window 
+                0,   // edit control ID 
+                hInstance, 
+                NULL);        // pointer not needed 
 
     CreateWindowEx(
         WS_EX_TRANSPARENT,
         TEXT("STATIC"), TEXT("截止:"), 
         WS_CHILD | WS_VISIBLE | SS_LEFT | SS_CENTERIMAGE,
-        10, 360, 40, 25, hWnd, NULL, hInstance, NULL);
+        10, 360, 40, 25, g_hMainWnd, NULL, hInstance, NULL);
 
     auto hwndDP = CreateWindowEx(0,
                             DATETIMEPICK_CLASS,
                             TEXT("DateTime"),
                             WS_BORDER|WS_CHILD|WS_VISIBLE,
                             50,360,165,25,
-                            hWnd,
+                            g_hMainWnd,
                             NULL,
                             hInstance,
                             NULL);
@@ -210,35 +213,38 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         WS_EX_TRANSPARENT,
         TEXT("STATIC"), TEXT("提醒:"), 
         WS_CHILD | WS_VISIBLE | SS_LEFT | SS_CENTERIMAGE,
-        10, 395, 40, 25, hWnd, NULL, hInstance, NULL);
+        10, 395, 40, 25, g_hMainWnd, NULL, hInstance, NULL);
 
     auto hwndDP1 = CreateWindowEx(0,
                             DATETIMEPICK_CLASS,
                             TEXT("DateTime"),
                             WS_BORDER|WS_CHILD|WS_VISIBLE,
                             50,395,165,25,
-                            hWnd,
+                            g_hMainWnd,
                             NULL,
                             hInstance,
                             NULL);
 
     DateTime_SetFormat(hwndDP1,TEXT("yyyy/MM/dd HH:mm"));
 
-    hCkBox = CreateWindowEx(
-        WS_EX_TRANSPARENT,
+    const auto hckbox = CreateWindow(
         TEXT("BUTTON"), TEXT("每日"), 
-        WS_CHILD | WS_VISIBLE  | BS_AUTOCHECKBOX | BS_FLAT,
-        220, 395, 50, 25, hWnd, (HMENU)ID_REMIND_CHECKBOX, hInstance, NULL);
+        WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX | BS_OWNERDRAW ,
+        220, 395, 50, 25, g_hMainWnd, (HMENU)IDC_REMIND_CHECKBOX, hInstance, NULL);
 
-    CreateWindow(
+    SetWindowLongPtr(hckbox, GWLP_USERDATA, (LONG_PTR)BST_CHECKED);
+
+    const auto hdel = CreateWindow(
         TEXT("BUTTON"), TEXT("删除"), 
-        WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | BS_FLAT,
-        10, 430, 270, 25, hWnd, NULL, hInstance, NULL);
+        WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | BS_OWNERDRAW,
+        10, 430, 260, 25, g_hMainWnd, (HMENU)IDC_BOTTON_DEL, hInstance, NULL);
+
+    SetWindowLongPtr(hdel, GWLP_USERDATA, (LONG_PTR)RGB(255, 0, 0));
 
     // 加载保存的 todo 项目
     LoadTodos();
 
-    ShowWindow(hWnd, nCmdShow);
+    ShowWindow(g_hMainWnd, nCmdShow);
 
     // 消息循环
     MSG msg = {};
@@ -253,14 +259,24 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 void GetRelativeRect(HWND hwnd, LPRECT rc)
 {
     GetWindowRect(hwnd,rc);
-    MapWindowPoints(HWND_DESKTOP,hWnd,(LPPOINT)rc,2);
+    MapWindowPoints(HWND_DESKTOP,g_hMainWnd,(LPPOINT)rc,2);
 }
 
 
-void show_more()
+void show_more(bool expand = true)
 {
     RECT rcInput;
-    GetRelativeRect(hEdit,&rcInput);
+    GetWindowRect(GetDlgItem(g_hMainWnd, IDC_EDIT_TITLE),&rcInput);
+
+    RECT rcDelete;
+    GetWindowRect(GetDlgItem(g_hMainWnd, IDC_BOTTON_DEL),&rcDelete);
+
+    SetDlgItemText(g_hMainWnd, IDC_BOTTON_EXPAND, expand?TEXT("x"):TEXT("v"));
+
+    RECT rcMain;
+    GetWindowRect(g_hMainWnd, &rcMain);
+    rcMain.bottom = (expand? rcDelete.bottom: rcInput.bottom) + 20;
+    MoveWindow(g_hMainWnd,rcMain.left, rcMain.top, rcMain.right - rcMain.left, rcMain.bottom - rcMain.top, true);
 }
 
 
@@ -277,6 +293,7 @@ LRESULT CALLBACK EditProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 	return CallWindowProc((WNDPROC)OldEditProc, hWnd, msg, wParam, lParam);
 }
 
+
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
     case WM_CREATE:
@@ -285,7 +302,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             NOTIFYICONDATA nid = {0};
             nid.cbSize = sizeof(NOTIFYICONDATA);
             nid.hWnd = hwnd;
-            nid.uID = ID_TRAYICON;
+            nid.uID = IDI_TRAYICON;
             nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
             nid.uCallbackMessage = WM_USER_SHELLICON;
             nid.hIcon = LoadIcon(NULL, IDI_APPLICATION);
@@ -298,24 +315,38 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         RegisterHotKey(hwnd, 1, MOD_CONTROL | MOD_SHIFT, 'T');
         break;
     case WM_COMMAND:
-        if ((HWND)lParam == hAddButton) {
-            AddTodoItem();
-        }
-        else if ((HWND)lParam == hRemindButton) {
-            SetReminder();
-        }
-        else if ((HWND)lParam == hCkBox) {
-            const auto checkstatus = Button_GetCheck(hCkBox) == BST_CHECKED;
-            // Button_SetCheck(hCkBox, checkstatus?BST_UNCHECKED:BST_CHECKED);
-        }
+        {
+            const auto ctrl_hwnd = (HWND)lParam;
+            const auto ctrl_id =  LOWORD(wParam);
+            const auto notify_type = HIWORD(wParam);
+            switch (ctrl_id)
+            {
+            case IDC_BOTTON_ADD:
+                AddTodoItem();
+                break;
+            case IDC_BOTTON_EXPAND:
+                g_expand = !g_expand;
+                SetReminder();
+                show_more(g_expand);
+                break;
+            case IDC_REMIND_CHECKBOX:
+            {
+                const auto hckbox = GetDlgItem(g_hMainWnd,IDC_REMIND_CHECKBOX);
+                const auto checkstatus = GetWindowLongPtr(hckbox,GWLP_USERDATA) == BST_CHECKED;
+                SetWindowLongPtr(hckbox, GWLP_USERDATA, (LONG_PTR)checkstatus?BST_UNCHECKED:BST_CHECKED);
+            }
+                break;  
+            case IDM_TRAY_EXIT:
+                DestroyWindow(g_hMainWnd); 
+                break;
+            default:
+                break;
+            }
 
-        // 处理菜单命令
-        if (HIWORD(wParam) == 0 && LOWORD(wParam) == ID_TRAY_EXIT) {
-            DestroyWindow(hWnd);    
         }
         break;
     case WM_NOTIFY:
-        if (((LPNMHDR)lParam)->hwndFrom == hList) 
+        if (((LPNMHDR)lParam)->hwndFrom == g_hListView) 
         {
             switch (((LPNMHDR)lParam)->code) 
             {
@@ -326,7 +357,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
                     LVHITTESTINFO plvhti = {0};
                     plvhti.pt = lpnmia->ptAction;
-                    ListView_SubItemHitTest(hList,&plvhti);
+                    ListView_SubItemHitTest(g_hListView,&plvhti);
 
                     // 获取点击的行和列
                     int iRow = plvhti.iItem;// lpnmia->iItem;         // 获取行索引
@@ -390,48 +421,54 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         break;
     case WM_DRAWITEM:
     {
-           LPDRAWITEMSTRUCT pDIS = (LPDRAWITEMSTRUCT)lParam;
-            if (pDIS->CtlID == ID_REMIND_CHECKBOX) { // ID of the checkbox
+           LPDRAWITEMSTRUCT lpDrawItemStruct = (LPDRAWITEMSTRUCT)lParam;
+            if (lpDrawItemStruct->CtlType == ODT_BUTTON) { // ID of the checkbox
                 // 获取设备上下文
-                HDC hdc = pDIS->hDC;
+                HDC hdc = lpDrawItemStruct->hDC;
 
                 // 设置背景颜色
-                SetBkColor(hdc, RGB(200, 200, 255));
-                FillRect(hdc, &pDIS->rcItem, CreateSolidBrush(RGB(255, 255, 255)));
+                SetBkColor(hdc, RGB(255, 255, 255));
+                SetBkMode(hdc, TRANSPARENT);
+                HBRUSH hBrush = CreateSolidBrush(RGB(255, 255, 255));
+                FillRect(hdc, &lpDrawItemStruct->rcItem, hBrush);
+                DeleteObject(hBrush);
 
                 // 绘制文本
-                SetTextColor(hdc, RGB(0, 0, 0));
-                const auto ckbox_size = pDIS->rcItem.bottom;
-                RECT rctext = pDIS->rcItem;
-                rctext.left += ckbox_size;
-                DrawText(hdc, TEXT("每日"), -1, &rctext, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+                SetTextColor(hdc, RGB(50, 50, 50));
+                // 绘制文本
+                TCHAR szText[256] = {0};
+                GetWindowText(lpDrawItemStruct->hwndItem, szText, 256);
 
-                // 绘制 Checkbox 方框
-                RECT box = { pDIS->rcItem.left, pDIS->rcItem.top, pDIS->rcItem.left + ckbox_size, pDIS->rcItem.top + ckbox_size };
-                DrawFrameControl(hdc, &box, DFC_BUTTON, DFCS_BUTTONCHECK |DFCS_CHECKED);// ((pDIS->itemState & ODS_SELECTED) ? DFCS_CHECKED : 0));
+                RECT rctext = lpDrawItemStruct->rcItem;
+
+                const auto userdata = GetWindowLongPtr(lpDrawItemStruct->hwndItem, GWLP_USERDATA);
+                if (userdata != BST_CHECKED && userdata != BST_UNCHECKED){
+                    // DrawFrameControl(hdc, &lpDrawItemStruct->rcItem, DFC_BUTTON, DFCS_BUTTONPUSH  | ((lpDrawItemStruct->itemState & ODS_SELECTED) ? DFCS_PUSHED | DFCS_HOT : DFCS_FLAT));
+                    const auto colorbrush = (lpDrawItemStruct->itemState & ODS_SELECTED)?CreateSolidBrush(userdata):GetSysColorBrush(COLOR_BTNFACE);
+                    FillRect(hdc,  &lpDrawItemStruct->rcItem,colorbrush);
+                    DeleteObject(colorbrush);
+
+                }else{
+                    const auto ckbox_offset = 5;
+                    const auto ckbox_size = lpDrawItemStruct->rcItem.bottom - ckbox_offset;
+                    rctext.left += ckbox_size;
+                    // 绘制 Checkbox 方框
+                    RECT box = { lpDrawItemStruct->rcItem.left + ckbox_offset, lpDrawItemStruct->rcItem.top + ckbox_offset, lpDrawItemStruct->rcItem.left + ckbox_size, lpDrawItemStruct->rcItem.top + ckbox_size };
+                    
+                    DrawFrameControl(hdc, &box, DFC_BUTTON, DFCS_BUTTONCHECK  | (BST_CHECKED == userdata)? DFCS_CHECKED |DFCS_FLAT:  DFCS_FLAT);//((lpDrawItemStruct->itemState & ODS_SELECTED) ? DFCS_CHECKED : 0));
+                }
+                DrawText(hdc, szText, -1, &rctext, DT_CENTER |DT_SINGLELINE | DT_VCENTER);
+
 
                 // 设置焦点矩形
-                if (pDIS->itemState & ODS_FOCUS) {
-                    DrawFocusRect(hdc, &pDIS->rcItem);
+                if (lpDrawItemStruct->itemState & ODS_FOCUS) {
+                    DrawFocusRect(hdc, &lpDrawItemStruct->rcItem);
                 }
 
                 return TRUE;
             }
     }
         break;
-    case WM_CTLCOLORBTN: 
-    {
-        HDC hdc = (HDC)wParam;
-        HWND hControl = (HWND)lParam;
-
-        // 设置文本颜色为白色
-        SetTextColor(hdc, RGB(255, 255, 255));
-        SetBkColor(hdc, RGB(255,0,0));
-        // 设置背景模式为不透明
-        // SetBkMode(hdc, TRANSPARENT);
-        // CreateSolidBrush();  // When you no longer need the HBRUSH object, call the DeleteObject function to delete it.
-        return (LRESULT) CreateSolidBrush(RGB(255,0,0)); //  GetStockObject(NULL_BRUSH); 
-    }
 
     case WM_CTLCOLORSTATIC:
         {
@@ -471,7 +508,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             NOTIFYICONDATA nid = {0};
             nid.cbSize = sizeof(NOTIFYICONDATA);
             nid.hWnd = hwnd;
-            nid.uID = ID_TRAYICON;
+            nid.uID = IDI_TRAYICON;
             Shell_NotifyIcon(NIM_DELETE, &nid);
         }
         PostQuitMessage(0);
@@ -493,8 +530,8 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             GetCursorPos(&pt);
             // SetForegroundWindow(hWnd);
             TrackPopupMenu(hPopMenu, TPM_RIGHTALIGN | TPM_BOTTOMALIGN | TPM_LEFTBUTTON,
-                            pt.x, pt.y, 0, hWnd, NULL);
-            PostMessage(hWnd, WM_NULL, 0, 0);
+                            pt.x, pt.y, 0, g_hMainWnd, NULL);
+            PostMessage(g_hMainWnd, WM_NULL, 0, 0);
         }
         break;
     default:
@@ -507,7 +544,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 // 创建托盘菜单
 void CreateTrayMenu() {
     hPopMenu = CreatePopupMenu();
-    AppendMenu(hPopMenu, MF_STRING, ID_TRAY_EXIT, TEXT("Exit"));
+    AppendMenu(hPopMenu, MF_STRING, IDM_TRAY_EXIT, TEXT("Exit"));
 }
 
 // 编辑待办事项
@@ -518,13 +555,14 @@ void EditTodoItem(int index, const std::wstring& newTodo) {
     lvi.iItem = index;
     lvi.iSubItem = 0;
     lvi.pszText = (LPTSTR)newTodo.c_str();
-    ListView_SetItem(hList, &lvi);
+    ListView_SetItem(g_hListView, &lvi);
     SaveTodos();
 }
 
+
 void AddTodoItem() {
     wchar_t buffer[256];
-    GetWindowText(hEdit, buffer, 256);
+    GetDlgItemText(g_hMainWnd, IDC_EDIT_TITLE, buffer, 256);
     size_t chsize = 0;
     StringCchLength(buffer,_countof(buffer) ,&chsize);
     if (chsize > 0) {
@@ -538,13 +576,13 @@ void AddTodoItem() {
         lvi.mask = LVIF_TEXT | LVIF_PARAM;
         lvi.pszText = buffer;
         lvi.lParam = todos.size()-1;
-        int index = ListView_InsertItem(hList, &lvi);
-        ListView_SetCheckState(hList, index, FALSE);
+        int index = ListView_InsertItem(g_hListView, &lvi);
+        ListView_SetCheckState(g_hListView, index, FALSE);
 
 
-        ListView_SetItemText(hList, index, 1, TEXT("!!!"));
+        ListView_SetItemText(g_hListView, index, 1, TEXT("!!!"));
 
-        SetWindowText(hEdit, TEXT(""));
+        SetDlgItemText(g_hMainWnd, IDC_EDIT_TITLE,TEXT(""));
 
         SaveTodos();
     }
@@ -560,14 +598,14 @@ void ToggleTodoItem(int index, bool checked) {
 
 void SetReminder() {
     // 简单起见，我们设置一个5秒后的提醒
-    SetTimer(hWnd, ID_TIMER, 5000, NULL);
+    SetTimer(g_hMainWnd, ID_TIMER, 5000, NULL);
 }
 
 void ShowNotification(const wchar_t* title, const wchar_t* content) {
     NOTIFYICONDATA nid = {0};
     nid.cbSize = sizeof(NOTIFYICONDATA);
-    nid.hWnd = hWnd;
-    nid.uID = ID_TRAYICON;
+    nid.hWnd = g_hMainWnd;
+    nid.uID = IDI_TRAYICON;
     nid.uFlags = NIF_INFO;
     nid.dwInfoFlags = NIIF_INFO;
     
@@ -591,7 +629,7 @@ void LoadTodos() {
         json j;
         i >> j;
         todos.clear();
-        ListView_DeleteAllItems(hList);
+        ListView_DeleteAllItems(g_hListView);
         for (const auto& item : j) {
             TodoItem todo;
             todo.text = utf8Towstr(item["text"]);
@@ -603,9 +641,9 @@ void LoadTodos() {
             lvi.mask = LVIF_TEXT | LVIF_PARAM;
             lvi.pszText = const_cast<LPTSTR>(todo.text.c_str());
             lvi.lParam = todos.size() - 1;
-            int index = ListView_InsertItem(hList, &lvi);
-            ListView_SetItemText(hList, index, 1, TEXT("!!!"));
-            ListView_SetCheckState(hList, index, todo.completed);
+            int index = ListView_InsertItem(g_hListView, &lvi);
+            ListView_SetItemText(g_hListView, index, 1, TEXT("!!!"));
+            ListView_SetCheckState(g_hListView, index, todo.completed);
         }
     }
 }
