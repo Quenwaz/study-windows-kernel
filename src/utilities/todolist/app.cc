@@ -21,8 +21,11 @@ using json = nlohmann::json;
 // 结构体定义
 struct TodoItem {
     std::wstring text;
+    std::wstring remark;
     intptr_t timestamp;
     intptr_t deadline;
+    intptr_t remind;
+    bool everyday;
     bool completed;
 };
 
@@ -54,6 +57,7 @@ LRESULT CALLBACK EditProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 void AddTodoItem();
 void EditTodoItem(int index, const std::wstring& newTodo);
 void ToggleTodoItem(int index,bool checked);
+void FillToMore(int index);
 void SetReminder();
 void ShowNotification(const wchar_t* title, const wchar_t* content);
 void SaveTodos();
@@ -336,6 +340,14 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 SetWindowLongPtr(hckbox, GWLP_USERDATA, (LONG_PTR)checkstatus?BST_UNCHECKED:BST_CHECKED);
             }
                 break;  
+            case IDC_EDIT_REMARK:
+            {
+                if (notify_type == EN_CHANGE)
+                {
+                    
+                }
+            }
+                break;
             case IDM_TRAY_EXIT:
                 DestroyWindow(g_hMainWnd); 
                 break;
@@ -346,9 +358,11 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         }
         break;
     case WM_NOTIFY:
-        if (((LPNMHDR)lParam)->hwndFrom == g_hListView) 
+    {
+        LPNMHDR lpnmhdr = (LPNMHDR)lParam;
+        if (lpnmhdr->hwndFrom == g_hListView) 
         {
-            switch (((LPNMHDR)lParam)->code) 
+            switch (lpnmhdr->code) 
             {
                 case NM_CLICK:
                 {
@@ -367,7 +381,11 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                         // 处理点击的行和列
                         wchar_t buffer[256];
                         wsprintf(buffer, TEXT("点击了第 %d 行，第 %d 列"), iRow + 1, iColumn + 1);
-                        MessageBox(hwnd, buffer, TEXT("ListView Click"), MB_OK);
+                        LV_ITEM lvitem = {0};
+                        lvitem.iItem = iRow;
+                        lvitem.mask = LVIF_PARAM;
+                        ListView_GetItem(lpnmhdr->hwndFrom, &lvitem);
+                        FillToMore(lvitem.lParam);
                     }
                     
                     break;
@@ -419,6 +437,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             }
         }
         break;
+    }
     case WM_DRAWITEM:
     {
            LPDRAWITEMSTRUCT lpDrawItemStruct = (LPDRAWITEMSTRUCT)lParam;
@@ -546,6 +565,16 @@ void CreateTrayMenu() {
     hPopMenu = CreatePopupMenu();
     AppendMenu(hPopMenu, MF_STRING, IDM_TRAY_EXIT, TEXT("Exit"));
 }
+
+
+void FillToMore(int index)
+{
+    const auto current_todo = todos[index];
+    SetDlgItemText(g_hMainWnd, IDC_EDIT_TITLE, current_todo.text.c_str());
+    SetDlgItemText(g_hMainWnd, IDC_EDIT_REMARK, current_todo.remark.c_str());
+
+}
+
 
 // 编辑待办事项
 void EditTodoItem(int index, const std::wstring& newTodo) {
