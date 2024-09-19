@@ -1,40 +1,30 @@
 #include <windows.h>
 #include <windowsx.h>
 #include <commctrl.h>
-#include <vector>
+
 #include <string>
-#include <fstream>
-#include <codecvt>
-#include <locale>
+
 #include <chrono>
 #include <ctime>
 #include <Strsafe.h>
-#include "common_header/json.hpp"
+
+
+#include "core.hpp"
 
 #pragma comment(lib, "comctl32.lib")
 #pragma comment(linker,"\"/manifestdependency:type='win32' \
 name='Microsoft.Windows.Common-Controls' version='6.0.0.0' \
 processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"")
 
-using json = nlohmann::json;
 
-// 结构体定义
-struct TodoItem {
-    std::wstring text;
-    std::wstring remark;
-    intptr_t timestamp;
-    intptr_t deadline;
-    intptr_t remind;
-    bool everyday;
-    bool completed;
-};
+
 
 // 全局变量
 HWND g_hMainWnd, g_hListView;
 bool g_expand = false;
 LONG_PTR OldEditProc, oldBtnProc;
 HMENU hPopMenu;
-std::vector<TodoItem> todos;
+
 UINT WM_TRAYICON = RegisterWindowMessage(TEXT("TaskbarCreated"));
 
 #define WM_USER_SHELLICON (WM_USER + 1)
@@ -60,56 +50,23 @@ enum{
 // 函数声明
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 LRESULT CALLBACK EditProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+void InitTodoListView();
 void AddTodoItem();
-void EditTodoItem(int index, const std::wstring& newTodo);
-void ToggleTodoItem(int index,bool checked);
 void FillToMore(int index);
 void ClearMore();
 void SetReminder();
+
 void ShowNotification(const wchar_t* title, const wchar_t* content);
-void SaveTodos();
-void LoadTodos();
 void CreateTrayMenu();
 
-// 将ANSI字符串转换为UTF-8
-std::string AnsiToUtf8(const std::string& ansiString) {
-    std::wstring_convert<std::codecvt_utf8<wchar_t>> converter;
-    std::wstring wideString;
-    int len = MultiByteToWideChar(CP_ACP, 0, ansiString.c_str(), -1, NULL, 0);
-    wideString.resize(len - 1); // 减去NULL终止符
-    MultiByteToWideChar(CP_ACP, 0, ansiString.c_str(), -1, &wideString[0], len);
-    return converter.to_bytes(wideString);
-}
+void DeselectAllItems(HWND hListView) {
+    // 获取 ListView 中的项数
+    int itemCount = ListView_GetItemCount(hListView);
 
-std::string Utf8ToAnsi(const std::string& utf8String) {
-    std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
-    std::wstring wideString = converter.from_bytes(utf8String);
-    int len = WideCharToMultiByte(CP_ACP, 0, wideString.c_str(), -1, NULL, 0, NULL, NULL);
-    std::string ansiString(len - 1, '\0'); // 减去NULL终止符
-    WideCharToMultiByte(CP_ACP, 0, wideString.c_str(), -1, &ansiString[0], len, NULL, NULL);
-    return ansiString;
-}
-
-std::string wstrToUTF8(const std::wstring& wstr) {
-    int utf8Length = WideCharToMultiByte(CP_UTF8, 0, wstr.c_str(), -1, nullptr, 0, nullptr, nullptr);
-    if (utf8Length <= 0) {
-        return "";
+    // 遍历所有项，取消选择
+    for (int i = 0; i < itemCount; i++) {
+        ListView_SetItemState(hListView, i, 0, LVIS_SELECTED);
     }
-
-    std::string utf8String(utf8Length - 1, '\0');
-    WideCharToMultiByte(CP_UTF8, 0, wstr.c_str(), -1, &utf8String[0], utf8Length - 1, nullptr, nullptr);
-    return utf8String;
-}
-
-std::wstring utf8Towstr(const std::string& str) {
-    int utf8Length = MultiByteToWideChar(CP_UTF8, 0, str.c_str(), -1, nullptr, 0);
-    if (utf8Length <= 0) {
-        return L"";
-    }
-
-    std::wstring utf8String(utf8Length - 1, '\0');
-    MultiByteToWideChar(CP_UTF8, 0, str.c_str(), -1, &utf8String[0], utf8Length);
-    return utf8String;
 }
 
 // WinMain 函数
@@ -150,11 +107,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     // 创建列表视图（带复选框）
     g_hListView = CreateWindowEx(0, WC_LISTVIEW, TEXT(""), 
-        WS_CHILD | WS_VISIBLE | LVS_REPORT | LVS_EDITLABELS | LVS_NOCOLUMNHEADER | LVS_SHOWSELALWAYS,
+        WS_CHILD | WS_VISIBLE | LVS_REPORT  | LVS_NOCOLUMNHEADER | LVS_SHOWSELALWAYS, // LVS_EDITLABELS
         10, 0, 280, 200, g_hMainWnd, (HMENU)IDC_LISTVIEW_TODO, hInstance, NULL);
     
     // 设置列表视图扩展样式以包含复选框
-    ListView_SetExtendedListViewStyle(g_hListView, LVS_EX_CHECKBOXES | LVS_EX_BORDERSELECT | LVS_EX_GRIDLINES | LVS_EX_INFOTIP); // | LVS_EX_FULLROWSELECT
+    ListView_SetExtendedListViewStyle(g_hListView, LVS_EX_CHECKBOXES | LVS_EX_BORDERSELECT | LVS_EX_GRIDLINES | LVS_EX_INFOTIP | LVS_EX_FULLROWSELECT); // | LVS_EX_FULLROWSELECT
     
     // 添加列
     LVCOLUMN lvc;
@@ -252,11 +209,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     SetWindowLongPtr(hdel, GWLP_USERDATA, (LONG_PTR)RGB(255, 0, 0));
 
-    // 加载保存的 todo 项目
-    LoadTodos();
-
     ShowWindow(g_hMainWnd, nCmdShow);
-
+    InitTodoListView();
     // 消息循环
     MSG msg = {};
     while (GetMessage(&msg, NULL, 0, 0)) {
@@ -340,6 +294,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 SetReminder();
                 show_more(g_expand);
                 if (!g_expand){
+                    DeselectAllItems(g_hListView);
                     ClearMore();
                 }
                 break;
@@ -350,11 +305,44 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 SetWindowLongPtr(hckbox, GWLP_USERDATA, (LONG_PTR)checkstatus?BST_UNCHECKED:BST_CHECKED);
             }
                 break;  
+            case IDC_EDIT_TITLE:
+            {
+                if (notify_type == EN_CHANGE)
+                {
+                    const auto sel = ListView_GetNextItem(g_hListView, -1, LVNI_SELECTED);
+                    if (sel != -1){
+                        LV_ITEM lvitem = {0};
+                        lvitem.iItem = sel;
+                        lvitem.mask = LVIF_PARAM;
+                        ListView_GetItem(g_hListView, &lvitem);
+                        wchar_t buffer[256]={0};
+                        GetDlgItemText(g_hMainWnd, IDC_EDIT_TITLE, buffer, _countof(buffer));
+                        core::TodoMgr::instance()->update_title(lvitem.lParam, buffer);
+
+                        lvitem.mask = LVIF_TEXT;
+                        lvitem.iItem = sel;
+                        lvitem.iSubItem = 0;
+                        lvitem.pszText = (LPTSTR)buffer;
+                        ListView_SetItem(g_hListView, &lvitem);
+
+                    }
+                }
+            }
+                break;
             case IDC_EDIT_REMARK:
             {
                 if (notify_type == EN_CHANGE)
                 {
-                    
+                    const auto sel = ListView_GetNextItem(g_hListView, -1, LVNI_SELECTED);
+                    if (sel != -1){
+                        LV_ITEM lvitem = {0};
+                        lvitem.iItem = sel;
+                        lvitem.mask = LVIF_PARAM;
+                        ListView_GetItem(g_hListView, &lvitem);
+                        wchar_t buffer[1024]={0};
+                        GetDlgItemText(g_hMainWnd, IDC_EDIT_REMARK, buffer, _countof(buffer));
+                        core::TodoMgr::instance()->update_remark(lvitem.lParam, buffer);
+                    }
                 }
             }
                 break;
@@ -411,19 +399,19 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                         if (pnmv->uChanged & LVIF_STATE) {
                             if ((pnmv->uNewState & LVIS_STATEIMAGEMASK) != (pnmv->uOldState & LVIS_STATEIMAGEMASK)) {
                                 // 复选框状态改变
-                                ToggleTodoItem(pnmv->lParam, ((pnmv->uNewState & LVIS_STATEIMAGEMASK) >> 12) == 2);
+                                core::TodoMgr::instance()->update_status(pnmv->lParam, ((pnmv->uNewState & LVIS_STATEIMAGEMASK) >> 12) == 2);
                             }
                         }
                     }
                     break;
-                case LVN_ENDLABELEDIT:
-                {
-                    NMLVDISPINFO* pdi = (NMLVDISPINFO*)lParam;
-                    if (pdi->item.pszText != NULL) {
-                        EditTodoItem(pdi->item.lParam, pdi->item.pszText);
-                    }
-                }
-                    break;
+                // case LVN_ENDLABELEDIT:
+                // {
+                //     NMLVDISPINFO* pdi = (NMLVDISPINFO*)lParam;
+                //     if (pdi->item.pszText != NULL) {
+                //         
+                //     }
+                // }
+                //     break;
                 case NM_CUSTOMDRAW:
                 {
                     LPNMLVCUSTOMDRAW pLVCD = (LPNMLVCUSTOMDRAW)lParam;
@@ -454,8 +442,15 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             {
             case DTN_DATETIMECHANGE:
             {
-                const auto lpChange = (LPNMDATETIMECHANGE) lParam;
-                lpChange->st;
+                const auto sel = ListView_GetNextItem(g_hListView, -1, LVNI_SELECTED);
+                if (sel != -1){
+                    LV_ITEM lvitem = {0};
+                    lvitem.iItem = sel;
+                    lvitem.mask = LVIF_PARAM;
+                    ListView_GetItem(g_hListView, &lvitem);
+                    const auto lpChange = (LPNMDATETIMECHANGE) lParam;
+                    core::TodoMgr::instance()->update_deadline(lvitem.lParam, core::SystemTimeToTimestamp(&lpChange->st));
+                }
             }
                 break;
             default:
@@ -551,8 +546,6 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         break;
 
     case WM_DESTROY:
-        // 保存 todo 项目
-        SaveTodos();
         // 移除托盘图标
         {
             NOTIFYICONDATA nid = {0};
@@ -606,24 +599,29 @@ void ClearMore()
 
 void FillToMore(int index)
 {
-    const auto current_todo = todos[index];
+    core::TodoItem current_todo = core::TodoMgr::instance()->at(index);
     SetDlgItemText(g_hMainWnd, IDC_EDIT_TITLE, current_todo.text.c_str());
     SetDlgItemText(g_hMainWnd, IDC_EDIT_REMARK, current_todo.remark.c_str());
 }
 
 
-// 编辑待办事项
-void EditTodoItem(int index, const std::wstring& newTodo) {
-    todos[index].text = newTodo;
-    LVITEM lvi;
-    lvi.mask = LVIF_TEXT;
-    lvi.iItem = index;
-    lvi.iSubItem = 0;
-    lvi.pszText = (LPTSTR)newTodo.c_str();
-    ListView_SetItem(g_hListView, &lvi);
-    SaveTodos();
-}
 
+void InitTodoListView()
+{
+    ListView_DeleteAllItems(g_hListView);
+    for (size_t i = 0; i < core::TodoMgr::instance()->size(); i++)
+    {
+        core::TodoItem todo = core::TodoMgr::instance()->at(i);
+        LVITEM lvi = {0};
+        lvi.mask = LVIF_TEXT | LVIF_PARAM;
+        lvi.pszText = const_cast<LPTSTR>(todo.text.c_str());
+        lvi.lParam = i;
+        int index = ListView_InsertItem(g_hListView, &lvi);
+        ListView_SetItemText(g_hListView, index, 1, TEXT("!!!"));
+        ListView_SetCheckState(g_hListView, index, todo.completed);
+    }
+
+}
 
 void AddTodoItem() {
     wchar_t buffer[256];
@@ -631,16 +629,15 @@ void AddTodoItem() {
     size_t chsize = 0;
     StringCchLength(buffer,_countof(buffer) ,&chsize);
     if (chsize > 0) {
-        TodoItem item;
+        core::TodoItem item;
         item.text = buffer;
         item.completed = false;
         item.timestamp = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
-        todos.push_back(item);
 
         LVITEM lvi = {0};
         lvi.mask = LVIF_TEXT | LVIF_PARAM;
         lvi.pszText = buffer;
-        lvi.lParam = todos.size()-1;
+        lvi.lParam = core::TodoMgr::instance()->add(item);
         int index = ListView_InsertItem(g_hListView, &lvi);
         ListView_SetCheckState(g_hListView, index, FALSE);
 
@@ -648,18 +645,10 @@ void AddTodoItem() {
         ListView_SetItemText(g_hListView, index, 1, TEXT("!!!"));
 
         SetDlgItemText(g_hMainWnd, IDC_EDIT_TITLE,TEXT(""));
-
-        SaveTodos();
     }
 }
 
-void ToggleTodoItem(int index, bool checked) {
-    if (index >= 0 && index < todos.size()) {
-        // BOOL checked = ListView_GetCheckState(hList, index);
-        todos[index].completed = checked;
-        SaveTodos();
-    }
-}
+
 
 void SetReminder() {
     // 简单起见，我们设置一个5秒后的提醒
@@ -679,36 +668,3 @@ void ShowNotification(const wchar_t* title, const wchar_t* content) {
     Shell_NotifyIcon(NIM_MODIFY, &nid);
 }
 
-void SaveTodos() {
-    json j;
-    for (const auto& item : todos) {
-        j.push_back({{"text",wstrToUTF8(item.text)}, {"status", item.completed}, {"createTime", item.timestamp}});
-    }
-    std::ofstream o("todos.json");
-    o << j << std::endl;
-}
-
-void LoadTodos() {
-    std::ifstream i("todos.json");
-    if (i.good()) {
-        json j;
-        i >> j;
-        todos.clear();
-        ListView_DeleteAllItems(g_hListView);
-        for (const auto& item : j) {
-            TodoItem todo;
-            todo.text = utf8Towstr(item["text"]);
-            todo.completed = item["status"];
-            todo.timestamp = item["createTime"];
-            todos.push_back(todo);
-
-            LVITEM lvi = {0};
-            lvi.mask = LVIF_TEXT | LVIF_PARAM;
-            lvi.pszText = const_cast<LPTSTR>(todo.text.c_str());
-            lvi.lParam = todos.size() - 1;
-            int index = ListView_InsertItem(g_hListView, &lvi);
-            ListView_SetItemText(g_hListView, index, 1, TEXT("!!!"));
-            ListView_SetCheckState(g_hListView, index, todo.completed);
-        }
-    }
-}
