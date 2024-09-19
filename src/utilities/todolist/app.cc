@@ -42,14 +42,20 @@ UINT WM_TRAYICON = RegisterWindowMessage(TEXT("TaskbarCreated"));
 // 定义菜单项ID
 #define ID_TIMER 1001
 
-#define IDM_TRAY_EXIT 1002
-#define IDI_TRAYICON 1003
-#define IDC_EDIT_TITLE 1004
-#define IDC_BOTTON_ADD 1005
-#define IDC_BOTTON_EXPAND 1006
-#define IDC_EDIT_REMARK 1007
-#define IDC_REMIND_CHECKBOX 1008
-#define IDC_BOTTON_DEL 1009
+enum{
+    IDM_TRAY_EXIT=1002,
+    IDI_TRAYICON,
+    IDC_LISTVIEW_TODO,
+    IDC_EDIT_TITLE,
+    IDC_BOTTON_ADD,
+    IDC_BOTTON_EXPAND,
+    IDC_EDIT_REMARK,
+    IDC_DATETIME_DEADLINE,
+    IDC_DATETIME_REMIND,
+    IDC_REMIND_CHECKBOX,
+    IDC_BOTTON_DEL
+};
+
 
 // 函数声明
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
@@ -58,6 +64,7 @@ void AddTodoItem();
 void EditTodoItem(int index, const std::wstring& newTodo);
 void ToggleTodoItem(int index,bool checked);
 void FillToMore(int index);
+void ClearMore();
 void SetReminder();
 void ShowNotification(const wchar_t* title, const wchar_t* content);
 void SaveTodos();
@@ -144,7 +151,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     // 创建列表视图（带复选框）
     g_hListView = CreateWindowEx(0, WC_LISTVIEW, TEXT(""), 
         WS_CHILD | WS_VISIBLE | LVS_REPORT | LVS_EDITLABELS | LVS_NOCOLUMNHEADER | LVS_SHOWSELALWAYS,
-        10, 0, 280, 200, g_hMainWnd, NULL, hInstance, NULL);
+        10, 0, 280, 200, g_hMainWnd, (HMENU)IDC_LISTVIEW_TODO, hInstance, NULL);
     
     // 设置列表视图扩展样式以包含复选框
     ListView_SetExtendedListViewStyle(g_hListView, LVS_EX_CHECKBOXES | LVS_EX_BORDERSELECT | LVS_EX_GRIDLINES | LVS_EX_INFOTIP); // | LVS_EX_FULLROWSELECT
@@ -181,7 +188,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         WS_EX_TRANSPARENT,
         TEXT("STATIC"), TEXT("备注:"), 
         WS_CHILD | WS_VISIBLE | SS_LEFT | SS_CENTERIMAGE,
-        10, 245, 50, 25, g_hMainWnd,  (HMENU)IDC_EDIT_REMARK, hInstance, NULL);
+        10, 245, 50, 25, g_hMainWnd,  NULL, hInstance, NULL);
 
     CreateWindowEx(
                 0, L"EDIT",   // predefined class 
@@ -190,7 +197,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
                 ES_LEFT | ES_MULTILINE |WS_BORDER| ES_AUTOVSCROLL, 
                 10, 270, 260, 75,   // set size in WM_SIZE message 
                 g_hMainWnd,         // parent window 
-                0,   // edit control ID 
+                (HMENU)IDC_EDIT_REMARK,   // edit control ID 
                 hInstance, 
                 NULL);        // pointer not needed 
 
@@ -206,7 +213,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
                             WS_BORDER|WS_CHILD|WS_VISIBLE,
                             50,360,165,25,
                             g_hMainWnd,
-                            NULL,
+                            (HMENU)IDC_DATETIME_DEADLINE,
                             hInstance,
                             NULL);
 
@@ -225,7 +232,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
                             WS_BORDER|WS_CHILD|WS_VISIBLE,
                             50,395,165,25,
                             g_hMainWnd,
-                            NULL,
+                            (HMENU)IDC_DATETIME_REMIND,
                             hInstance,
                             NULL);
 
@@ -332,6 +339,9 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 g_expand = !g_expand;
                 SetReminder();
                 show_more(g_expand);
+                if (!g_expand){
+                    ClearMore();
+                }
                 break;
             case IDC_REMIND_CHECKBOX:
             {
@@ -360,8 +370,9 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     case WM_NOTIFY:
     {
         LPNMHDR lpnmhdr = (LPNMHDR)lParam;
-        if (lpnmhdr->hwndFrom == g_hListView) 
+        switch (lpnmhdr->idFrom)
         {
+        case IDC_LISTVIEW_TODO:
             switch (lpnmhdr->code) 
             {
                 case NM_CLICK:
@@ -386,6 +397,8 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                         lvitem.mask = LVIF_PARAM;
                         ListView_GetItem(lpnmhdr->hwndFrom, &lvitem);
                         FillToMore(lvitem.lParam);
+                    }else{
+                        ClearMore();
                     }
                     
                     break;
@@ -435,7 +448,25 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                     break;
                 }
             }
+            break;
+        case IDC_DATETIME_DEADLINE:
+            switch (lpnmhdr->code)
+            {
+            case DTN_DATETIMECHANGE:
+            {
+                const auto lpChange = (LPNMDATETIMECHANGE) lParam;
+                lpChange->st;
+            }
+                break;
+            default:
+                break;
+            }
+            break;
+        default:
+            break;
         }
+
+            
         break;
     }
     case WM_DRAWITEM:
@@ -567,12 +598,17 @@ void CreateTrayMenu() {
 }
 
 
+void ClearMore()
+{
+    SetDlgItemText(g_hMainWnd, IDC_EDIT_TITLE, TEXT(""));
+    SetDlgItemText(g_hMainWnd, IDC_EDIT_REMARK, TEXT(""));
+}
+
 void FillToMore(int index)
 {
     const auto current_todo = todos[index];
     SetDlgItemText(g_hMainWnd, IDC_EDIT_TITLE, current_todo.text.c_str());
     SetDlgItemText(g_hMainWnd, IDC_EDIT_REMARK, current_todo.remark.c_str());
-
 }
 
 
