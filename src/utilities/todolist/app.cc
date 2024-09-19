@@ -437,25 +437,29 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 }
             }
             break;
-        case IDC_DATETIME_DEADLINE:
-            switch (lpnmhdr->code)
-            {
-            case DTN_DATETIMECHANGE:
-            {
-                const auto sel = ListView_GetNextItem(g_hListView, -1, LVNI_SELECTED);
-                if (sel != -1){
-                    LV_ITEM lvitem = {0};
-                    lvitem.iItem = sel;
-                    lvitem.mask = LVIF_PARAM;
-                    ListView_GetItem(g_hListView, &lvitem);
-                    const auto lpChange = (LPNMDATETIMECHANGE) lParam;
-                    core::TodoMgr::instance()->update_deadline(lvitem.lParam, core::SystemTimeToTimestamp(&lpChange->st));
+        default:
+            break;
+        }
+
+        switch (lpnmhdr->code)
+        {
+        case DTN_DATETIMECHANGE:
+        {
+            const auto sel = ListView_GetNextItem(g_hListView, -1, LVNI_SELECTED);
+            if (sel != -1){
+                LV_ITEM lvitem = {0};
+                lvitem.iItem = sel;
+                lvitem.mask = LVIF_PARAM;
+                ListView_GetItem(g_hListView, &lvitem);
+                const auto lpChange = (LPNMDATETIMECHANGE) lParam;
+                const auto timestamp= core::SystemTimeToTimestamp(&lpChange->st);
+                if(lpnmhdr->idFrom == IDC_DATETIME_DEADLINE)
+                    core::TodoMgr::instance()->update_deadline(lvitem.lParam, timestamp);
+                else{
+                    core::TodoMgr::instance()->update_remaind(lvitem.lParam, timestamp);
                 }
             }
-                break;
-            default:
-                break;
-            }
+        }
             break;
         default:
             break;
