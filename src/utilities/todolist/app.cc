@@ -377,9 +377,6 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                     int iColumn = plvhti.iSubItem;//  lpnmia->iSubItem;   // 获取列索引
 
                     if (iRow != -1 && iColumn != -1) {
-                        // 处理点击的行和列
-                        wchar_t buffer[256];
-                        wsprintf(buffer, TEXT("点击了第 %d 行，第 %d 列"), iRow + 1, iColumn + 1);
                         LV_ITEM lvitem = {0};
                         lvitem.iItem = iRow;
                         lvitem.mask = LVIF_PARAM;
@@ -388,13 +385,10 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                     }else{
                         ClearMore();
                     }
-                    
                     break;
-
                 }
                 case LVN_ITEMCHANGED:
                     {
-                        
                         LPNMLISTVIEW pnmv = (LPNMLISTVIEW)lParam;
                         if (pnmv->uChanged & LVIF_STATE) {
                             if ((pnmv->uNewState & LVIS_STATEIMAGEMASK) != (pnmv->uOldState & LVIS_STATEIMAGEMASK)) {
@@ -464,8 +458,6 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         default:
             break;
         }
-
-            
         break;
     }
     case WM_DRAWITEM:
