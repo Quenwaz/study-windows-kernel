@@ -167,14 +167,15 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     auto hwndDP = CreateWindowEx(0,
                             DATETIMEPICK_CLASS,
                             TEXT("DateTime"),
-                            WS_BORDER|WS_CHILD|WS_VISIBLE,
-                            50,360,165,25,
+                            WS_BORDER|WS_CHILD|WS_VISIBLE |  DTS_SHOWNONE ,
+                            50,360,170,25,
                             g_hMainWnd,
                             (HMENU)IDC_DATETIME_DEADLINE,
                             hInstance,
                             NULL);
 
     DateTime_SetFormat(hwndDP,TEXT("yyyy/MM/dd HH:mm"));
+    DateTime_SetSystemtime(hwndDP, GDT_NONE, 0);
 
 
     CreateWindowEx(
@@ -183,28 +184,29 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         WS_CHILD | WS_VISIBLE | SS_LEFT | SS_CENTERIMAGE,
         10, 395, 40, 25, g_hMainWnd, NULL, hInstance, NULL);
 
-    auto hwndDP1 = CreateWindowEx(0,
+    hwndDP = CreateWindowEx(0,
                             DATETIMEPICK_CLASS,
                             TEXT("DateTime"),
-                            WS_BORDER|WS_CHILD|WS_VISIBLE,
-                            50,395,165,25,
+                            WS_BORDER|WS_CHILD|WS_VISIBLE|  DTS_SHOWNONE,
+                            50,395,170,25,
                             g_hMainWnd,
                             (HMENU)IDC_DATETIME_REMIND,
                             hInstance,
                             NULL);
 
-    DateTime_SetFormat(hwndDP1,TEXT("yyyy/MM/dd HH:mm"));
+    DateTime_SetFormat(hwndDP,TEXT("yyyy/MM/dd HH:mm"));
+    DateTime_SetSystemtime(hwndDP, GDT_NONE, 0);
 
     const auto hckbox = CreateWindow(
         TEXT("BUTTON"), TEXT("每日"), 
         WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX | BS_OWNERDRAW ,
-        220, 395, 50, 25, g_hMainWnd, (HMENU)IDC_REMIND_CHECKBOX, hInstance, NULL);
+        225, 395, 50, 25, g_hMainWnd, (HMENU)IDC_REMIND_CHECKBOX, hInstance, NULL);
 
     SetWindowLongPtr(hckbox, GWLP_USERDATA, (LONG_PTR)BST_CHECKED);
 
     const auto hdel = CreateWindow(
         TEXT("BUTTON"), TEXT("删除"), 
-        WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | BS_OWNERDRAW,
+        WS_CHILD  | BS_PUSHBUTTON | BS_OWNERDRAW,
         10, 430, 260, 25, g_hMainWnd, (HMENU)IDC_BOTTON_DEL, hInstance, NULL);
 
     SetWindowLongPtr(hdel, GWLP_USERDATA, (LONG_PTR)RGB(255, 0, 0));
@@ -221,6 +223,18 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     return 0;
 }
 
+LPARAM GetListViewParam(HWND hlsv, int row)
+{
+    if(row == -1){
+        return 0;
+    }
+    LV_ITEM lvitem = {0};
+    lvitem.iItem = row;
+    lvitem.mask = LVIF_PARAM;
+    ListView_GetItem(hlsv, &lvitem);
+    return lvitem.lParam;
+}
+
 void GetRelativeRect(HWND hwnd, LPRECT rc)
 {
     GetWindowRect(hwnd,rc);
@@ -233,15 +247,45 @@ void show_more(bool expand = true)
     RECT rcInput;
     GetWindowRect(GetDlgItem(g_hMainWnd, IDC_EDIT_TITLE),&rcInput);
 
+    const HWND btndel = GetDlgItem(g_hMainWnd, IDC_BOTTON_DEL);
     RECT rcDelete;
-    GetWindowRect(GetDlgItem(g_hMainWnd, IDC_BOTTON_DEL),&rcDelete);
+    GetWindowRect(btndel,&rcDelete);
 
     SetDlgItemText(g_hMainWnd, IDC_BOTTON_EXPAND, expand?TEXT("x"):TEXT("v"));
 
     RECT rcMain;
     GetWindowRect(g_hMainWnd, &rcMain);
-    rcMain.bottom = (expand? rcDelete.bottom: rcInput.bottom) + 20;
+    rcMain.bottom = (expand? (IsWindowVisible(btndel)?rcDelete.bottom:rcDelete.top - 10): rcInput.bottom) + 20;
     MoveWindow(g_hMainWnd,rcMain.left, rcMain.top, rcMain.right - rcMain.left, rcMain.bottom - rcMain.top, true);
+}
+
+void show_add_button(bool show)
+{
+    RECT rcInput = {0};
+    const HWND edit = GetDlgItem(g_hMainWnd, IDC_EDIT_TITLE);
+    GetRelativeRect(edit,&rcInput);
+
+    const HWND btnadd = GetDlgItem(g_hMainWnd, IDC_BOTTON_ADD);
+    const HWND btndel = GetDlgItem(g_hMainWnd, IDC_BOTTON_DEL);
+
+    RECT rcBtn = {0};
+    GetRelativeRect(btnadd,&rcBtn);
+
+    ShowWindow(btnadd, show? SW_SHOW:SW_HIDE);
+    ShowWindow(btndel, show? SW_HIDE:SW_SHOW);
+    rcInput.right = show? rcBtn.left - 10 : rcBtn.right;
+    MoveWindow(edit,rcInput.left, rcInput.top, rcInput.right - rcInput.left, rcInput.bottom - rcInput.top, true);
+
+    RECT rcMain;
+    GetWindowRect(g_hMainWnd, &rcMain);
+
+    RECT rcDelete;
+    GetWindowRect(btndel,&rcDelete);
+
+    if (rcMain.bottom > (rcDelete.top - 20)){
+        rcMain.bottom = (show? rcDelete.top-10: rcDelete.bottom) + 20;
+        MoveWindow(g_hMainWnd,rcMain.left, rcMain.top, rcMain.right - rcMain.left, rcMain.bottom - rcMain.top, true);
+    }
 }
 
 
@@ -286,6 +330,15 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             const auto notify_type = HIWORD(wParam);
             switch (ctrl_id)
             {
+            case IDC_BOTTON_DEL:
+                {
+                    const auto sel = ListView_GetNextItem(g_hListView, -1, LVNI_SELECTED);
+                    if (sel != -1){
+                        core::TodoMgr::instance()->remove(GetListViewParam(g_hListView, sel));
+                        ListView_DeleteItem(g_hListView, sel);
+                    }
+                }
+                break;
             case IDC_BOTTON_ADD:
                 AddTodoItem();
                 break;
@@ -311,20 +364,15 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 {
                     const auto sel = ListView_GetNextItem(g_hListView, -1, LVNI_SELECTED);
                     if (sel != -1){
-                        LV_ITEM lvitem = {0};
-                        lvitem.iItem = sel;
-                        lvitem.mask = LVIF_PARAM;
-                        ListView_GetItem(g_hListView, &lvitem);
                         wchar_t buffer[256]={0};
                         GetDlgItemText(g_hMainWnd, IDC_EDIT_TITLE, buffer, _countof(buffer));
-                        core::TodoMgr::instance()->update_title(lvitem.lParam, buffer);
-
+                        core::TodoMgr::instance()->update_title(GetListViewParam(g_hListView, sel), buffer);
+                        LV_ITEM lvitem = {0};
                         lvitem.mask = LVIF_TEXT;
                         lvitem.iItem = sel;
                         lvitem.iSubItem = 0;
                         lvitem.pszText = (LPTSTR)buffer;
                         ListView_SetItem(g_hListView, &lvitem);
-
                     }
                 }
             }
@@ -335,13 +383,9 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 {
                     const auto sel = ListView_GetNextItem(g_hListView, -1, LVNI_SELECTED);
                     if (sel != -1){
-                        LV_ITEM lvitem = {0};
-                        lvitem.iItem = sel;
-                        lvitem.mask = LVIF_PARAM;
-                        ListView_GetItem(g_hListView, &lvitem);
                         wchar_t buffer[1024]={0};
                         GetDlgItemText(g_hMainWnd, IDC_EDIT_REMARK, buffer, _countof(buffer));
-                        core::TodoMgr::instance()->update_remark(lvitem.lParam, buffer);
+                        core::TodoMgr::instance()->update_remark(GetListViewParam(g_hListView, sel), buffer);
                     }
                 }
             }
@@ -377,12 +421,9 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                     int iColumn = plvhti.iSubItem;//  lpnmia->iSubItem;   // 获取列索引
 
                     if (iRow != -1 && iColumn != -1) {
-                        LV_ITEM lvitem = {0};
-                        lvitem.iItem = iRow;
-                        lvitem.mask = LVIF_PARAM;
-                        ListView_GetItem(lpnmhdr->hwndFrom, &lvitem);
-                        FillToMore(lvitem.lParam);
+                        FillToMore(GetListViewParam(lpnmhdr->hwndFrom, iRow));
                     }else{
+
                         ClearMore();
                     }
                     break;
@@ -441,16 +482,13 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         {
             const auto sel = ListView_GetNextItem(g_hListView, -1, LVNI_SELECTED);
             if (sel != -1){
-                LV_ITEM lvitem = {0};
-                lvitem.iItem = sel;
-                lvitem.mask = LVIF_PARAM;
-                ListView_GetItem(g_hListView, &lvitem);
+                const auto idx = GetListViewParam(g_hListView, sel);
                 const auto lpChange = (LPNMDATETIMECHANGE) lParam;
                 const auto timestamp= core::SystemTimeToTimestamp(&lpChange->st);
                 if(lpnmhdr->idFrom == IDC_DATETIME_DEADLINE)
-                    core::TodoMgr::instance()->update_deadline(lvitem.lParam, timestamp);
+                    core::TodoMgr::instance()->update_deadline(idx, timestamp);
                 else{
-                    core::TodoMgr::instance()->update_remaind(lvitem.lParam, timestamp);
+                    core::TodoMgr::instance()->update_remaind(idx, timestamp);
                 }
             }
         }
@@ -591,6 +629,9 @@ void ClearMore()
 {
     SetDlgItemText(g_hMainWnd, IDC_EDIT_TITLE, TEXT(""));
     SetDlgItemText(g_hMainWnd, IDC_EDIT_REMARK, TEXT(""));
+    DateTime_SetSystemtime(GetDlgItem(g_hMainWnd, IDC_DATETIME_DEADLINE), GDT_NONE, 0);
+    DateTime_SetSystemtime(GetDlgItem(g_hMainWnd, IDC_DATETIME_REMIND), GDT_NONE, 0);
+    show_add_button(true);
 }
 
 void FillToMore(int index)
@@ -598,6 +639,12 @@ void FillToMore(int index)
     core::TodoItem current_todo = core::TodoMgr::instance()->at(index);
     SetDlgItemText(g_hMainWnd, IDC_EDIT_TITLE, current_todo.text.c_str());
     SetDlgItemText(g_hMainWnd, IDC_EDIT_REMARK, current_todo.remark.c_str());
+    DateTime_SetSystemtime(GetDlgItem(g_hMainWnd, IDC_DATETIME_DEADLINE), 
+        current_todo.deadline== 0? GDT_NONE:GDT_VALID, &core::TimestampToSystemTime(current_todo.deadline));
+    DateTime_SetSystemtime(GetDlgItem(g_hMainWnd, IDC_DATETIME_REMIND), 
+        current_todo.remind== 0? GDT_NONE:GDT_VALID, &core::TimestampToSystemTime(current_todo.remind));
+    
+    show_add_button(false);
 }
 
 
@@ -611,7 +658,7 @@ void InitTodoListView()
         LVITEM lvi = {0};
         lvi.mask = LVIF_TEXT | LVIF_PARAM;
         lvi.pszText = const_cast<LPTSTR>(todo.text.c_str());
-        lvi.lParam = i;
+        lvi.lParam = todo.id;
         int index = ListView_InsertItem(g_hListView, &lvi);
         ListView_SetItemText(g_hListView, index, 1, TEXT("!!!"));
         ListView_SetCheckState(g_hListView, index, todo.completed);
@@ -620,34 +667,42 @@ void InitTodoListView()
 }
 
 void AddTodoItem() {
-    wchar_t buffer[256];
-    GetDlgItemText(g_hMainWnd, IDC_EDIT_TITLE, buffer, 256);
+    wchar_t buffer[1024] ={0};
+    GetDlgItemText(g_hMainWnd, IDC_EDIT_TITLE, buffer, _countof(buffer));
     size_t chsize = 0;
     StringCchLength(buffer,_countof(buffer) ,&chsize);
     if (chsize > 0) {
         core::TodoItem item;
         item.text = buffer;
+        ZeroMemory(buffer, sizeof(buffer));
+        GetDlgItemText(g_hMainWnd, IDC_EDIT_REMARK, buffer, _countof(buffer));
+        item.remark = buffer;
         item.completed = false;
         item.timestamp = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
 
+        SYSTEMTIME deadline = {0};
+        if(GDT_VALID == DateTime_GetSystemtime(GetDlgItem(g_hMainWnd, IDC_DATETIME_DEADLINE),&deadline)){
+            item.deadline = core::SystemTimeToTimestamp(&deadline);
+        }
+
+        SYSTEMTIME remind = {0};
+        if(GDT_VALID == DateTime_GetSystemtime(GetDlgItem(g_hMainWnd, IDC_DATETIME_REMIND),&remind)){
+            item.remind = core::SystemTimeToTimestamp(&remind);
+        }
+
         LVITEM lvi = {0};
         lvi.mask = LVIF_TEXT | LVIF_PARAM;
-        lvi.pszText = buffer;
+        lvi.pszText = item.text.data();
         lvi.lParam = core::TodoMgr::instance()->add(item);
         int index = ListView_InsertItem(g_hListView, &lvi);
         ListView_SetCheckState(g_hListView, index, FALSE);
-
-
         ListView_SetItemText(g_hListView, index, 1, TEXT("!!!"));
 
-        SetDlgItemText(g_hMainWnd, IDC_EDIT_TITLE,TEXT(""));
+        ClearMore();
     }
 }
 
-
-
 void SetReminder() {
-    // 简单起见，我们设置一个5秒后的提醒
     SetTimer(g_hMainWnd, ID_TIMER, 5000, NULL);
 }
 
@@ -663,4 +718,3 @@ void ShowNotification(const wchar_t* title, const wchar_t* content) {
     StringCchCopy(nid.szInfo,_countof(nid.szInfo), content);
     Shell_NotifyIcon(NIM_MODIFY, &nid);
 }
-

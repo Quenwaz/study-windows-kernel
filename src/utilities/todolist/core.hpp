@@ -7,6 +7,7 @@ namespace core
 
     // 结构体定义
     struct TodoItem {
+        size_t id{0};
         std::wstring text;
         std::wstring remark;
         intptr_t timestamp{0};
@@ -33,6 +34,7 @@ public:
     static TodoMgr* instance();
     void dump();
     int add(const TodoItem& item);
+    void remove(const int& id);
     TodoItem& at(int idx);
     const TodoItem& operator[](int idx) const;
     size_t size();

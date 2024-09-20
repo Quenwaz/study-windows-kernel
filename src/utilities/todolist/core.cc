@@ -98,6 +98,16 @@ std::wstring utf8Towstr(const std::string& str) {
 struct TodoMgr::Impl{
     const std::string filename{"todos.json"};
     std::vector<TodoItem> todos;
+
+    auto at(const int& id){
+        TodoItem val;
+        val.id = id;
+        auto findret = std::equal_range(todos.begin(), todos.end(),val, [](const TodoItem& lhs, const TodoItem& rhs){
+            return lhs.id < rhs.id;
+        });
+
+        return findret.first;
+    }
 };
 
 
@@ -140,8 +150,10 @@ void TodoMgr::load() {
     if (i.good()) {
         json j;
         i >> j;
+        size_t id = 0;
         for (const auto& item : j) {
             core::TodoItem todo;
+            todo.id = id++;
             todo.text = utf8Towstr(item["text"]);
             todo.remark = utf8Towstr(item["remark"]);
             todo.completed = item["status"];
@@ -155,14 +167,23 @@ void TodoMgr::load() {
 
 int TodoMgr::add(const TodoItem& item)
 {
+    auto newid = pimpl_->todos.empty()? 0 : pimpl_->todos.back().id + 1;
     pimpl_->todos.push_back(item);
+    pimpl_->todos.back().id = newid;
     dump();
-    return pimpl_->todos.size() - 1;
+    return newid;
+}
+
+void TodoMgr::remove(const int& id)
+{
+    assert(id >=0 && id < pimpl_->todos.size());
+    pimpl_->todos.erase(pimpl_->at(id));
+    dump();
 }
 
 const TodoItem& TodoMgr::operator[](int idx) const
 {
-    return pimpl_->todos[idx];
+    return *pimpl_->at(idx);
 }
 
 size_t TodoMgr::size()
@@ -173,47 +194,47 @@ size_t TodoMgr::size()
 TodoItem& TodoMgr::at(int idx)
 {
     assert(idx >=0 && idx < pimpl_->todos.size());
-    return pimpl_->todos[idx];
+    return *pimpl_->at(idx);
 }
 
 void TodoMgr::update_status(int idx, bool finished)
 {
     assert(idx >=0 && idx < pimpl_->todos.size());
-    pimpl_->todos[idx].completed = finished;
+    pimpl_->at(idx)->completed = finished;
     dump();
 }
 
 void TodoMgr::update_title(int idx, const std::wstring& str)
 {
     assert(idx >=0 && idx < pimpl_->todos.size());
-    pimpl_->todos[idx].text = str;
+    pimpl_->at(idx)->text = str;
     dump();
 }
 
 
 void TodoMgr::update_remark(int idx, const std::wstring& str){
     assert(idx >=0 && idx < pimpl_->todos.size());
-    pimpl_->todos[idx].remark = str;
+    pimpl_->at(idx)->remark = str;
     dump();
 }
 
 
 void TodoMgr::update_deadline(int idx, time_t t){
     assert(idx >=0 && idx < pimpl_->todos.size());
-    pimpl_->todos[idx].deadline = t;
+    pimpl_->at(idx)->deadline = t;
     dump();
 }
 
 
 void TodoMgr::update_remaind(int idx, time_t t){
     assert(idx >=0 && idx < pimpl_->todos.size());
-    pimpl_->todos[idx].remind = t;
+    pimpl_->at(idx)->remind = t;
     dump();
 }
 
 void TodoMgr::update_everyday(int idx, bool everyday){
     assert(idx >=0 && idx < pimpl_->todos.size());
-    pimpl_->todos[idx].everyday = everyday;
+    pimpl_->at(idx)->everyday = everyday;
     dump();
 }
 
