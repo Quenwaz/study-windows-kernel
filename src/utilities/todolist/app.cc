@@ -16,9 +16,6 @@
 name='Microsoft.Windows.Common-Controls' version='6.0.0.0' \
 processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"")
 
-
-
-
 // 全局变量
 HWND g_hMainWnd, g_hListView;
 bool g_expand = false;
@@ -30,6 +27,7 @@ UINT WM_TRAYICON = RegisterWindowMessage(TEXT("TaskbarCreated"));
 #define WM_USER_SHELLICON (WM_USER + 1)
 
 // 定义菜单项ID
+const auto global_tick_frequency =  60;
 #define ID_TIMER 1001
 
 enum{
@@ -50,12 +48,14 @@ enum{
 // 函数声明
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 LRESULT CALLBACK EditProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+
+int CALLBACK CompareFunc(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort);
 void InitTodoListView();
 void AddTodoItem();
 void FillToMore(int index);
 void ClearMore();
-void SetReminder();
 
+void TimeToNotify();
 void ShowNotification(const wchar_t* title, const wchar_t* content);
 void CreateTrayMenu();
 
@@ -105,19 +105,20 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         return 0;
     }
 
+
     // 创建列表视图（带复选框）
     g_hListView = CreateWindowEx(0, WC_LISTVIEW, TEXT(""), 
-        WS_CHILD | WS_VISIBLE | LVS_REPORT  | LVS_NOCOLUMNHEADER | LVS_SHOWSELALWAYS, // LVS_EDITLABELS
+        WS_CHILD | WS_VISIBLE | LVS_REPORT  | LVS_NOCOLUMNHEADER , // LVS_EDITLABELS | LVS_OWNERDRAWFIXED 
         10, 0, 280, 200, g_hMainWnd, (HMENU)IDC_LISTVIEW_TODO, hInstance, NULL);
     
     // 设置列表视图扩展样式以包含复选框
-    ListView_SetExtendedListViewStyle(g_hListView, LVS_EX_CHECKBOXES | LVS_EX_BORDERSELECT | LVS_EX_GRIDLINES | LVS_EX_INFOTIP | LVS_EX_FULLROWSELECT); // | LVS_EX_FULLROWSELECT
+    ListView_SetExtendedListViewStyle(g_hListView, LVS_EX_CHECKBOXES | LVS_EX_BORDERSELECT | LVS_EX_GRIDLINES | LVS_EX_INFOTIP); // | LVS_EX_FULLROWSELECT
     
     // 添加列
     LVCOLUMN lvc;
     lvc.mask = LVCF_TEXT | LVCF_WIDTH | LVCF_SUBITEM;
-    lvc.cx = 238;
     lvc.pszText = const_cast<LPTSTR>(TEXT("Todo Items"));
+    lvc.cx = 238;
     ListView_InsertColumn(g_hListView, 0, &lvc);
 
     lvc.mask = LVCF_IMAGE | LVCF_WIDTH| LVCF_SUBITEM;
@@ -212,6 +213,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     SetWindowLongPtr(hdel, GWLP_USERDATA, (LONG_PTR)RGB(255, 0, 0));
 
     ShowWindow(g_hMainWnd, nCmdShow);
+    SetTimer(g_hMainWnd, ID_TIMER, 1000 * global_tick_frequency, NULL);
     InitTodoListView();
     // 消息循环
     MSG msg = {};
@@ -344,7 +346,6 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 break;
             case IDC_BOTTON_EXPAND:
                 g_expand = !g_expand;
-                SetReminder();
                 show_more(g_expand);
                 if (!g_expand){
                     DeselectAllItems(g_hListView);
@@ -423,7 +424,6 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                     if (iRow != -1 && iColumn != -1) {
                         FillToMore(GetListViewParam(lpnmhdr->hwndFrom, iRow));
                     }else{
-
                         ClearMore();
                     }
                     break;
@@ -433,6 +433,8 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                         LPNMLISTVIEW pnmv = (LPNMLISTVIEW)lParam;
                         if (pnmv->uChanged & LVIF_STATE) {
                             if ((pnmv->uNewState & LVIS_STATEIMAGEMASK) != (pnmv->uOldState & LVIS_STATEIMAGEMASK)) {
+                                DeselectAllItems(g_hListView);
+                                ClearMore();
                                 // 复选框状态改变
                                 core::TodoMgr::instance()->update_status(pnmv->lParam, ((pnmv->uNewState & LVIS_STATEIMAGEMASK) >> 12) == 2);
                             }
@@ -449,26 +451,29 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 //     break;
                 case NM_CUSTOMDRAW:
                 {
-                    LPNMLVCUSTOMDRAW pLVCD = (LPNMLVCUSTOMDRAW)lParam;
-
+                    LPNMLVCUSTOMDRAW lvcd = (LPNMLVCUSTOMDRAW)lParam;
+                    const auto ischecked = ListView_GetCheckState(lpnmhdr->hwndFrom, lvcd->nmcd.dwItemSpec);
                     // Start custom draw
-                    if (pLVCD->nmcd.dwDrawStage == CDDS_PREPAINT) {
+                    switch (lvcd->nmcd.dwDrawStage)
+                    {
+                    case CDDS_PREPAINT:
                         return CDRF_NOTIFYITEMDRAW; // Ask to receive item-level notifications
-                    }
-
-                    // 准备绘制特定的项
-                    if (pLVCD->nmcd.dwDrawStage == CDDS_ITEMPREPAINT) {
+                    case CDDS_ITEMPREPAINT:
+                        if (ischecked){
+                            lvcd->clrText = RGB(150, 150, 150);
+                        }
                         return CDRF_NOTIFYSUBITEMDRAW; // 请求接收子项级别的通知
-                    }
+                    case (CDDS_SUBITEM | CDDS_ITEMPREPAINT):
 
-                    // Item drawing
-                    if (pLVCD->nmcd.dwDrawStage == (CDDS_SUBITEM | CDDS_ITEMPREPAINT)) {
-                        if (pLVCD->iSubItem == 1) { // pLVCD->nmcd.dwItemSpec == 1 For the second item (index 1)
-                            pLVCD->clrText = RGB(255, 0, 0); // Set text color to red
+                      if (lvcd->iSubItem == 1) { // pLVCD->nmcd.dwItemSpec == 1 For the second item (index 1)
+                            lvcd->clrText = RGB(255, 0, 0); // Set text color to red
+                            if(ischecked) lvcd->clrTextBk = RGB(0, 200, 0);
                         }
                         return CDRF_NEWFONT;
+                    default:
+                        break;
                     }
-                    break;
+                    return CDRF_DODEFAULT;  // 默认处理
                 }
             }
             break;
@@ -588,13 +593,14 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             nid.uID = IDI_TRAYICON;
             Shell_NotifyIcon(NIM_DELETE, &nid);
         }
+        KillTimer(hwnd, ID_TIMER);
         PostQuitMessage(0);
         break;
 
     case WM_TIMER:
         if (wParam == ID_TIMER) {
-            ShowNotification(TEXT("Todo Reminder"), TEXT("It's time to do your task!"));
-            KillTimer(hwnd, ID_TIMER);
+            TimeToNotify();
+            
         }
         break;
 
@@ -624,7 +630,6 @@ void CreateTrayMenu() {
     AppendMenu(hPopMenu, MF_STRING, IDM_TRAY_EXIT, TEXT("Exit"));
 }
 
-
 void ClearMore()
 {
     SetDlgItemText(g_hMainWnd, IDC_EDIT_TITLE, TEXT(""));
@@ -647,7 +652,10 @@ void FillToMore(int index)
     show_add_button(false);
 }
 
-
+int  CompareFunc(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort)
+{
+    return lParam1 == lParam2?0 : lParam1 < lParam2? -1:1;
+}
 
 void InitTodoListView()
 {
@@ -660,10 +668,27 @@ void InitTodoListView()
         lvi.pszText = const_cast<LPTSTR>(todo.text.c_str());
         lvi.lParam = todo.id;
         int index = ListView_InsertItem(g_hListView, &lvi);
-        ListView_SetItemText(g_hListView, index, 1, TEXT("!!!"));
+        ListView_SetItemText(g_hListView, index, 1, TEXT(""));
         ListView_SetCheckState(g_hListView, index, todo.completed);
     }
 
+    ListView_SortItems(g_hListView, CompareFunc, 0);
+}
+
+void TimeToNotify()
+{
+    for (size_t i = 0; i < core::TodoMgr::instance()->size(); i++)
+    {
+        core::TodoItem todo = core::TodoMgr::instance()->at(i);
+        if (todo.remind == 0 || todo.completed){
+            continue;
+        }
+        const auto duration = std::chrono::system_clock::now() - std::chrono::system_clock::from_time_t(todo.remind);
+        const auto elapsed= std::chrono::duration_cast<std::chrono::seconds>(duration).count();
+        if (std::chrono::duration_cast<std::chrono::seconds>(duration).count() <= global_tick_frequency){
+            ShowNotification(TEXT("Todo Reminder"), todo.text.c_str());
+        }
+    }
 }
 
 void AddTodoItem() {
@@ -702,9 +727,6 @@ void AddTodoItem() {
     }
 }
 
-void SetReminder() {
-    SetTimer(g_hMainWnd, ID_TIMER, 5000, NULL);
-}
 
 void ShowNotification(const wchar_t* title, const wchar_t* content) {
     NOTIFYICONDATA nid = {0};

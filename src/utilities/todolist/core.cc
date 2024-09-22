@@ -35,20 +35,26 @@ void TimetToFileTime(time_t t, LPFILETIME pft)
 }
 
 
-time_t SystemTimeToTimestamp(const LPSYSTEMTIME st)
+time_t SystemTimeToTimestamp(const LPSYSTEMTIME local_system_time)
 {
+    SYSTEMTIME utc_time = {0};
+    TzSpecificLocalTimeToSystemTime(nullptr, local_system_time,&utc_time);
     FILETIME ft ={0};
-    SystemTimeToFileTime(st, &ft);
+    SystemTimeToFileTime(&utc_time, &ft);
     return FileTimeToUnixTime(&ft);
 }
 
 
 SYSTEMTIME TimestampToSystemTime(time_t tm)
 {
-    FILETIME ft;
-    TimetToFileTime(tm,&ft);
+    FILETIME utc_ft = {0};
+    TimetToFileTime(tm,&utc_ft);
+
+    FILETIME local_ft = {0};
+    FileTimeToLocalFileTime(&utc_ft,&local_ft);
+
     SYSTEMTIME st ={0};
-    FileTimeToSystemTime(&ft,&st);
+    FileTimeToSystemTime(&local_ft,&st);
     return st;
 }
 
@@ -98,6 +104,7 @@ std::wstring utf8Towstr(const std::string& str) {
 struct TodoMgr::Impl{
     const std::string filename{"todos.json"};
     std::vector<TodoItem> todos;
+    size_t total_finished{0};
 
     auto at(const int& id){
         TodoItem val;
@@ -107,6 +114,11 @@ struct TodoMgr::Impl{
         });
 
         return findret.first;
+    }
+
+    void place_to_back(const int& id)
+    {
+
     }
 };
 
@@ -161,6 +173,8 @@ void TodoMgr::load() {
             todo.deadline = item["deadline"];
             todo.remind = item["remind"];
             pimpl_->todos.push_back(todo);
+
+            if (todo.completed) ++pimpl_->total_finished;
         }
     }
 }
@@ -200,7 +214,14 @@ TodoItem& TodoMgr::at(int idx)
 void TodoMgr::update_status(int idx, bool finished)
 {
     assert(idx >=0 && idx < pimpl_->todos.size());
-    pimpl_->at(idx)->completed = finished;
+    if(finished) pimpl_->total_finished+=1;
+    else pimpl_->total_finished-=1;
+    
+    auto iterfind = pimpl_->at(idx);
+    iterfind->completed = finished;
+    iterfind->id += pimpl_->todos.size();
+    if (finished)
+        pimpl_->place_to_back(idx);
     dump();
 }
 
