@@ -2,12 +2,21 @@
 #include <time.h>
 #include "core.hpp"
 #include <vector>
+#include <set>
 #include <fstream>
 #include <codecvt>
 #include <locale>
+#include <execution>
 #include "common_header/json.hpp"
 
 using json = nlohmann::json;
+
+namespace
+{
+    auto timestamp(){
+        return std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+    }
+} // namespace
 
 namespace core
 {
@@ -99,27 +108,82 @@ std::wstring utf8Towstr(const std::string& str) {
     return utf8String;
 }
 
+std::wstring& trim(std::wstring &str) {
+    // 从字符串开头查找第一个非空白字符
+    str.erase(str.begin(), std::find_if(str.begin(), str.end(), [](unsigned char ch) {
+        return !std::isspace(ch);
+    }));
+
+    // 从字符串末尾查找第一个非空白字符
+    str.erase(std::find_if(str.rbegin(), str.rend(), [](unsigned char ch) {
+        return !std::isspace(ch);
+    }).base(), str.end());
+    return str;
+}
+
+struct TodoItemKey{
+    uint64_t id{0};
+    short status{0};
+
+    TodoItemKey(uint64_t i, short s): id(i), status(s){}
+
+    bool operator<(const TodoItemKey& rhs) const{
+        if (this->status == -1 || rhs.status == -1){
+            return this->id < rhs.id;
+        }
+
+        return this->status == rhs.status? this->id > rhs.id:this->status==0?true:false;
+    }
+};
 
 
 struct TodoMgr::Impl{
+    typedef std::vector<TodoItem> container_type;
     const std::string filename{"todos.json"};
-    std::vector<TodoItem> todos;
-    size_t total_finished{0};
 
-    auto at(const int& id){
-        TodoItem val;
-        val.id = id;
-        auto findret = std::equal_range(todos.begin(), todos.end(),val, [](const TodoItem& lhs, const TodoItem& rhs){
+    size_t size() const{
+        return todos.size();
+    }
+
+    auto at(const uint64_t &id){
+        TodoItem temp;
+        temp.id =id;
+        auto iterfind = std::equal_range(this->todos.begin(), this->todos.end(), temp, [](const TodoItem& lhs,const TodoItem & rhs){
             return lhs.id < rhs.id;
         });
-
-        return findret.first;
+        assert(iterfind.first != iterfind.second);
+        return iterfind.first;
     }
 
-    void place_to_back(const int& id)
+    void sort(){
+        std::sort(std::execution::par,this->todos.begin(), this->todos.end(),[](const TodoItem& lhs,const TodoItem& rhs){
+            return lhs.status == rhs.status? lhs.lastmodified > rhs.lastmodified:lhs.status ? true:false;
+        });
+    }
+
+    int push(TodoItem& item)
     {
-
+        item.id = tick++;
+        this->todos.push_back(item);
+        return item.id;
     }
+
+    void remove(const uint64_t &id){
+        this->todos.erase(at(id));
+    }
+
+    auto begin(){
+        return this->todos.begin();
+    }
+
+    auto end(){
+        return this->todos.end();
+    }
+
+
+private:
+    container_type todos;
+    uint64_t tick{0};
 };
 
 
@@ -143,12 +207,12 @@ TodoMgr* TodoMgr::instance()
 
 void TodoMgr::dump() {
     json j;
-    for (const auto& item : pimpl_->todos) {
+    for (auto& item : *pimpl_){
         j.push_back({
             {"text",wstrToUTF8(item.text)},
             {"remark", wstrToUTF8(item.remark)}, 
-            {"status", item.completed}, 
-            {"createTime", item.timestamp},
+            {"status", item.status}, 
+            {"lastmodified", item.lastmodified},
             {"deadline", item.deadline},
             {"remind", item.remind}
             });
@@ -165,97 +229,130 @@ void TodoMgr::load() {
         size_t id = 0;
         for (const auto& item : j) {
             core::TodoItem todo;
-            todo.id = id++;
             todo.text = utf8Towstr(item["text"]);
             todo.remark = utf8Towstr(item["remark"]);
-            todo.completed = item["status"];
-            todo.timestamp = item["createTime"];
+            todo.status = item["status"];
+            todo.lastmodified = item["lastmodified"];
             todo.deadline = item["deadline"];
             todo.remind = item["remind"];
-            pimpl_->todos.push_back(todo);
-
-            if (todo.completed) ++pimpl_->total_finished;
+            pimpl_->push(todo);
         }
     }
 }
 
-int TodoMgr::add(const TodoItem& item)
+const TodoItem& TodoMgr::at(const uint64_t& id)
 {
-    auto newid = pimpl_->todos.empty()? 0 : pimpl_->todos.back().id + 1;
-    pimpl_->todos.push_back(item);
-    pimpl_->todos.back().id = newid;
-    dump();
-    return newid;
+    return *pimpl_->at(id);
 }
 
-void TodoMgr::remove(const int& id)
+uint64_t TodoMgr::add(TodoItem& item)
 {
-    assert(id >=0 && id < pimpl_->todos.size());
-    pimpl_->todos.erase(pimpl_->at(id));
+    item.lastmodified = timestamp();
+    const auto id = pimpl_->push(item);
+    dump();
+    return id;
+}
+
+void TodoMgr::remove(const uint64_t& id)
+{
+    pimpl_->remove(id);
     dump();
 }
 
-const TodoItem& TodoMgr::operator[](int idx) const
+struct TodoMgr::Iterator::Impl{
+    Impl(const TodoMgr::Impl::container_type::iterator& i):iterator(i) {}
+    TodoMgr::Impl::container_type::iterator iterator;
+};
+
+TodoMgr::Iterator::Iterator(void* d)
+    : pimpl(new Impl(*static_cast<TodoMgr::Impl::container_type::iterator*>(d)))
 {
-    return *pimpl_->at(idx);
+}
+
+bool TodoMgr::Iterator::operator==(const Iterator& rhs) const
+{
+    return pimpl->iterator == rhs.pimpl->iterator;
+}
+
+bool TodoMgr::Iterator::operator!=(const Iterator& rhs) const
+{
+    return !(pimpl->iterator == rhs.pimpl->iterator);
+}
+
+void TodoMgr::Iterator::operator++()
+{
+    ++pimpl->iterator;
+}
+
+const TodoItem& TodoMgr::Iterator::operator*() const
+{
+    return *pimpl->iterator;
+}
+
+TodoMgr::Iterator::operator const TodoItem&() const
+{
+    return *pimpl->iterator;
+}
+
+TodoMgr::Iterator::~Iterator(){
+    delete pimpl;
+    pimpl = nullptr;
+}
+
+TodoMgr::Iterator TodoMgr::begin()
+{
+    return Iterator(&pimpl_->begin());
+}
+
+TodoMgr::Iterator TodoMgr::end()
+{
+    return Iterator(&pimpl_->end());
 }
 
 size_t TodoMgr::size()
 {
-    return pimpl_->todos.size();
+    return pimpl_->size();
 }
 
-TodoItem& TodoMgr::at(int idx)
+void TodoMgr::update_status(uint64_t idx, bool finished)
 {
-    assert(idx >=0 && idx < pimpl_->todos.size());
-    return *pimpl_->at(idx);
+    auto item = pimpl_->at(idx);
+    item->status = finished;
+    item->lastmodified = timestamp();
+    dump();
 }
 
-void TodoMgr::update_status(int idx, bool finished)
+void TodoMgr::update_title(uint64_t idx, const std::wstring& str)
 {
-    assert(idx >=0 && idx < pimpl_->todos.size());
-    if(finished) pimpl_->total_finished+=1;
-    else pimpl_->total_finished-=1;
-    
-    auto iterfind = pimpl_->at(idx);
-    iterfind->completed = finished;
-    iterfind->id += pimpl_->todos.size();
-    if (finished)
-        pimpl_->place_to_back(idx);
-    dump();
-}
-
-void TodoMgr::update_title(int idx, const std::wstring& str)
-{
-    assert(idx >=0 && idx < pimpl_->todos.size());
-    pimpl_->at(idx)->text = str;
+    auto item = pimpl_->at(idx);
+    item->text = str;
     dump();
 }
 
 
-void TodoMgr::update_remark(int idx, const std::wstring& str){
-    assert(idx >=0 && idx < pimpl_->todos.size());
-    pimpl_->at(idx)->remark = str;
+void TodoMgr::update_remark(uint64_t idx, const std::wstring& str){
+    auto item = pimpl_->at(idx);
+    item->remark = str;
     dump();
 }
 
 
-void TodoMgr::update_deadline(int idx, time_t t){
-    assert(idx >=0 && idx < pimpl_->todos.size());
-    pimpl_->at(idx)->deadline = t;
+void TodoMgr::update_deadline(uint64_t idx, time_t t){
+    auto item = pimpl_->at(idx);
+    item->deadline = t;
     dump();
 }
 
 
-void TodoMgr::update_remaind(int idx, time_t t){
-    assert(idx >=0 && idx < pimpl_->todos.size());
-    pimpl_->at(idx)->remind = t;
+void TodoMgr::update_remaind(uint64_t idx, time_t t){
+    auto item = pimpl_->at(idx);
+    item->remind = t;
     dump();
 }
 
-void TodoMgr::update_everyday(int idx, bool everyday){
-    assert(idx >=0 && idx < pimpl_->todos.size());
-    pimpl_->at(idx)->everyday = everyday;
+void TodoMgr::update_everyday(uint64_t idx, bool everyday){
+    auto item = pimpl_->at(idx);
+    item->everyday = everyday;
     dump();
 }
 

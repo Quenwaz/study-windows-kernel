@@ -50,9 +50,9 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 LRESULT CALLBACK EditProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 int CALLBACK CompareFunc(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort);
-void InitTodoListView();
+void FreshListView();
 void AddTodoItem();
-void FillToMore(int index);
+void FillToMore(LPARAM index);
 void ClearMore();
 
 void TimeToNotify();
@@ -214,7 +214,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     ShowWindow(g_hMainWnd, nCmdShow);
     SetTimer(g_hMainWnd, ID_TIMER, 1000 * global_tick_frequency, NULL);
-    InitTodoListView();
+    FreshListView();
     // 消息循环
     MSG msg = {};
     while (GetMessage(&msg, NULL, 0, 0)) {
@@ -294,7 +294,7 @@ void show_add_button(bool show)
 LRESULT CALLBACK EditProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 	switch (msg) {
 	case WM_KEYDOWN: {
-		if (wParam == VK_RETURN) {//以回车消息为例
+		if (wParam == VK_RETURN && IsWindowVisible(GetDlgItem(g_hMainWnd, IDC_BOTTON_ADD))) {//以回车消息为例
 			AddTodoItem();
 		}
 		return 0;
@@ -436,6 +436,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                                 DeselectAllItems(g_hListView);
                                 ClearMore();
                                 // 复选框状态改变
+                                const auto stat = ((pnmv->uNewState & LVIS_STATEIMAGEMASK) >> 12) ;
                                 core::TodoMgr::instance()->update_status(pnmv->lParam, ((pnmv->uNewState & LVIS_STATEIMAGEMASK) >> 12) == 2);
                             }
                         }
@@ -639,7 +640,7 @@ void ClearMore()
     show_add_button(true);
 }
 
-void FillToMore(int index)
+void FillToMore(LPARAM index)
 {
     core::TodoItem current_todo = core::TodoMgr::instance()->at(index);
     SetDlgItemText(g_hMainWnd, IDC_EDIT_TITLE, current_todo.text.c_str());
@@ -657,30 +658,30 @@ int  CompareFunc(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort)
     return lParam1 == lParam2?0 : lParam1 < lParam2? -1:1;
 }
 
-void InitTodoListView()
+void FreshListView()
 {
     ListView_DeleteAllItems(g_hListView);
-    for (size_t i = 0; i < core::TodoMgr::instance()->size(); i++)
+    for(auto todo : *core::TodoMgr::instance())
     {
-        core::TodoItem todo = core::TodoMgr::instance()->at(i);
         LVITEM lvi = {0};
-        lvi.mask = LVIF_TEXT | LVIF_PARAM;
+        lvi.mask = LVIF_TEXT | LVIF_PARAM | LVIF_STATE; 
+        lvi.stateMask =  LVIS_STATEIMAGEMASK ;
+        lvi.state = INDEXTOSTATEIMAGEMASK(todo.status?2:1);
         lvi.pszText = const_cast<LPTSTR>(todo.text.c_str());
         lvi.lParam = todo.id;
         int index = ListView_InsertItem(g_hListView, &lvi);
         ListView_SetItemText(g_hListView, index, 1, TEXT(""));
-        ListView_SetCheckState(g_hListView, index, todo.completed);
+        ListView_SetCheckState(g_hListView, index, todo.status);
     }
 
-    ListView_SortItems(g_hListView, CompareFunc, 0);
+    // ListView_SortItems(g_hListView, CompareFunc, 0);
 }
 
 void TimeToNotify()
 {
-    for (size_t i = 0; i < core::TodoMgr::instance()->size(); i++)
+    for(auto& todo : *core::TodoMgr::instance())
     {
-        core::TodoItem todo = core::TodoMgr::instance()->at(i);
-        if (todo.remind == 0 || todo.completed){
+        if (todo.remind == 0 || todo.status){
             continue;
         }
         const auto duration = std::chrono::system_clock::now() - std::chrono::system_clock::from_time_t(todo.remind);
@@ -702,8 +703,7 @@ void AddTodoItem() {
         ZeroMemory(buffer, sizeof(buffer));
         GetDlgItemText(g_hMainWnd, IDC_EDIT_REMARK, buffer, _countof(buffer));
         item.remark = buffer;
-        item.completed = false;
-        item.timestamp = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+        item.status = false;
 
         SYSTEMTIME deadline = {0};
         if(GDT_VALID == DateTime_GetSystemtime(GetDlgItem(g_hMainWnd, IDC_DATETIME_DEADLINE),&deadline)){
@@ -721,7 +721,7 @@ void AddTodoItem() {
         lvi.lParam = core::TodoMgr::instance()->add(item);
         int index = ListView_InsertItem(g_hListView, &lvi);
         ListView_SetCheckState(g_hListView, index, FALSE);
-        ListView_SetItemText(g_hListView, index, 1, TEXT("!!!"));
+        ListView_SetItemText(g_hListView, index, 1, TEXT(""));
 
         ClearMore();
     }

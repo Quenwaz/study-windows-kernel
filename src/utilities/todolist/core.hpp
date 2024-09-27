@@ -7,14 +7,14 @@ namespace core
 
     // 结构体定义
     struct TodoItem {
-        size_t id{0};
+        uint64_t id;
         std::wstring text;
         std::wstring remark;
-        intptr_t timestamp{0};
-        intptr_t deadline{0};
-        intptr_t remind{0};
+        uint64_t lastmodified{0};
+        uint64_t deadline{0};
+        uint64_t remind{0};
         bool everyday{false};
-        bool completed{false};
+        bool status{0};
     };
 
     time_t SystemTimeToTimestamp(const LPSYSTEMTIME ft);
@@ -26,25 +26,42 @@ namespace core
     std::string wstrToUTF8(const std::wstring& wstr);
     std::wstring utf8Towstr(const std::string& str);
 
+    // 删除字符串两端的空白字符
+    std::wstring& trim(std::wstring &str);
+
 class TodoMgr
 {
     TodoMgr();
 public:
+    struct Iterator{
+        explicit Iterator(void* d);
+        ~Iterator();
+        void operator++();
+        bool operator==(const Iterator& rhs) const;
+        bool operator!=(const Iterator& rhs) const;
+        const TodoItem& operator*() const;
+        operator const TodoItem&() const;
+        struct Impl;
+        Impl* pimpl;
+    };
+
     ~TodoMgr();
     static TodoMgr* instance();
     void dump();
-    int add(const TodoItem& item);
-    void remove(const int& id);
-    TodoItem& at(int idx);
-    const TodoItem& operator[](int idx) const;
+    uint64_t add(TodoItem& item);
+    void remove(const uint64_t& id);
+    const TodoItem& at(const uint64_t& id);
+    Iterator begin();
+    Iterator end();
+    void operator++() const;
     size_t size();
 
-    void update_status(int idx, bool finished);
-    void update_title(int idx, const std::wstring& str);
-    void update_remark(int idx, const std::wstring& str);
-    void update_deadline(int idx, time_t t);
-    void update_remaind(int idx, time_t t);
-    void update_everyday(int idx, bool everyday);
+    void update_status(uint64_t idx, bool finished);
+    void update_title(uint64_t idx, const std::wstring& str);
+    void update_remark(uint64_t idx, const std::wstring& str);
+    void update_deadline(uint64_t idx, time_t t);
+    void update_remaind(uint64_t idx, time_t t);
+    void update_everyday(uint64_t idx, bool everyday);
 private:
     void load();
 
